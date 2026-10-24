@@ -1,0 +1,22 @@
+[Unit]
+Description=NeuroScan Agent API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=-__DIR__/.env
+Environment=OUTPUT_DIR=/tmp/neuroscan-outputs
+ExecStart=__DIR__/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8766 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+# Keep this service from ever starving the other apps on the 1 GB VM
+MemoryHigh=350M
+MemoryMax=450M
+OOMScoreAdjust=500
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
