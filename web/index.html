@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NeuroScan Agent</title>
+<style>:root{--bg:#020810;--card:#0a1620;--bd:#16303f;--fg:#e6f1f7;--mut:#8aa0ad;--acc:#00d2ff;--red:#ff5d5d;--amb:#ffb020;--grn:#35d07f}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}main{max-width:720px;margin:0 auto;padding:24px 16px 48px}h1{margin:0 0 4px;font-size:28px}.sub{color:var(--mut);margin:0 0 20px}.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--bd);background:#06101a;color:var(--fg);font:inherit}button{margin-top:14px;padding:11px 20px;border:0;border-radius:8px;background:var(--acc);color:#00232d;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}.msg{color:var(--amb);margin-top:10px}.err{color:var(--red)}.bar{display:flex;align-items:center;gap:10px;margin:6px 0}.bar span:first-child{width:96px;font-size:14px}.track{flex:1;height:10px;background:#10222f;border-radius:5px;overflow:hidden}.fill{height:100%;background:var(--acc)}.big{font-size:26px;font-weight:700}.tag{display:inline-block;padding:2px 10px;border-radius:99px;border:1px solid currentColor;font-size:13px;margin-left:8px}.note{font-size:12px;color:var(--mut)}h3{margin:0 0 6px;font-size:14px;color:var(--mut);font-weight:600}</style></head>
+<body><main>
+<h1>🧠 NeuroScan Agent</h1>
+<p class="sub">Brain MRI classification — Glioma · Meningioma · Pituitary · No Tumor. Research use only.</p>
+<div class="card">
+<label>MRI image (JPG PNG WEBP BMP max 10 MB)</label><input id="file" type="file" accept="image/*">
+<label>Your Gemini API key (free at aistudio.google.com/apikey)</label><input id="key" type="password" autocomplete="off" placeholder="Paste your key">
+<label>Patient context (optional — do not enter real patient data)</label><textarea id="ctx" rows="2" maxlength="500"></textarea>
+<button id="go">Analyse</button><div id="status" class="msg"></div>
+</div>
+<div id="out"></div>
+<p class="note">⚠ Not a medical device. Never upload real patient scans. Results are not validated for clinical use and do not replace a radiologist.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
+const COL={High:'var(--red)',Medium:'var(--amb)',Low:'var(--grn)'};
+$('key').value=sessionStorage.getItem('gk')||'';
+function status(m,bad){$('status').textContent=m;$('status').className='msg'+(bad?' err':'')}
+function section(title,text){const c=el('div','card');c.append(el('h3','',title),el('div','',text));return c}
+function render(d){
+  const r=d.result||{},out=$('out');out.replaceChildren();
+  const top=el('div','card'),big=el('div','big',r.classification||'Unknown');
+  const tag=el('span','tag',(r.risk||'?')+' risk');tag.style.color=COL[r.risk]||'var(--mut)';big.append(tag);
+  top.append(big,el('div','note','Top confidence '+(r.top_confidence||0).toFixed(1)+'%'));
+  for(const k of ['Glioma','Meningioma','No Tumor','Pituitary']){
+    const v=(r.confidence||{})[k]||0,b=el('div','bar'),t=el('div','track'),f=el('div','fill');
+    f.style.width=v+'%';t.append(f);b.append(el('span','',k),t,el('span','',v.toFixed(1)+'%'));top.append(b)}
+  out.append(top);
+  if(d.review&&d.review.flagged)out.append(section('Flagged for review ('+d.review.flag_severity+')',d.review.flag_reason||''));
+  if(r.clinical_notes)out.append(section('Clinical reasoning',r.clinical_notes));
+  if(r.recommendation)out.append(section('Recommendation',r.recommendation));
+  if(d.agent_trace&&d.agent_trace.final_summary)out.append(section('Summary',d.agent_trace.final_summary));
+}
+$('go').onclick=async()=>{
+  const f=$('file').files[0],k=$('key').value.trim();
+  if(!f)return status('Choose an MRI image first.',1);
+  if(!k)return status('Enter your Gemini API key.',1);
+  sessionStorage.setItem('gk',k);$('go').disabled=true;$('out').replaceChildren();
+  status('Analysing... this usually takes 20-60 seconds.');
+  const fd=new FormData();fd.append('file',f);fd.append('context',$('ctx').value);
+  try{
+    const res=await fetch('/analyze',{method:'POST',headers:{'X-Gemini-Key':k},body:fd});
+    const d=await res.json().catch(()=>({}));
+    if(res.status===422&&d.error==='not_brain_mri')status('Not a brain MRI: '+(d.detail||''),1);
+    else if(!res.ok)status(d.detail||('Request failed ('+res.status+').'),1);
+    else{status('');render(d)}
+  }catch(e){status('Network error. Please try again.',1)}
+  $('go').disabled=false;
+};
+</script></body></html>
