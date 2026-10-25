@@ -1,5 +1,5 @@
 # 🧠 NeuroScan Agent
-
+🌐 **Live demo:** https://neuroscanm.duckdns.org
 > AI-powered brain tumor classification agent — built on IEEE SCEECS 2026 research. **100% FREE** using Google Gemini + OpenRouter.
 
 [![IEEE Published](https://img.shields.io/badge/IEEE-SCEECS%202026-blue)](https://doi.org/10.1109/SCEECS68810.2026.11429884)
