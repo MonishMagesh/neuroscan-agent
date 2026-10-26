@@ -1,52 +1,879 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NeuroScan Agent</title>
-<style>:root{--bg:#020810;--card:#0a1620;--bd:#16303f;--fg:#e6f1f7;--mut:#8aa0ad;--acc:#00d2ff;--red:#ff5d5d;--amb:#ffb020;--grn:#35d07f}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}main{max-width:720px;margin:0 auto;padding:24px 16px 48px}h1{margin:0 0 4px;font-size:28px}.sub{color:var(--mut);margin:0 0 20px}.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--bd);background:#06101a;color:var(--fg);font:inherit}button{margin-top:14px;padding:11px 20px;border:0;border-radius:8px;background:var(--acc);color:#00232d;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}.msg{color:var(--amb);margin-top:10px}.err{color:var(--red)}.bar{display:flex;align-items:center;gap:10px;margin:6px 0}.bar span:first-child{width:96px;font-size:14px}.track{flex:1;height:10px;background:#10222f;border-radius:5px;overflow:hidden}.fill{height:100%;background:var(--acc)}.big{font-size:26px;font-weight:700}.tag{display:inline-block;padding:2px 10px;border-radius:99px;border:1px solid currentColor;font-size:13px;margin-left:8px}.note{font-size:12px;color:var(--mut)}h3{margin:0 0 6px;font-size:14px;color:var(--mut);font-weight:600}</style></head>
-<body><main>
-<h1>🧠 NeuroScan Agent</h1>
-<p class="sub">Brain MRI classification — Glioma · Meningioma · Pituitary · No Tumor. Research use only.</p>
-<div class="card">
-<label>MRI image (JPG PNG WEBP BMP max 10 MB)</label><input id="file" type="file" accept="image/*">
-<label>Your Gemini API key (free at aistudio.google.com/apikey)</label><input id="key" type="password" autocomplete="off" placeholder="Paste your key">
-<label>Patient context (optional — do not enter real patient data)</label><textarea id="ctx" rows="2" maxlength="500"></textarea>
-<button id="go">Analyse</button><div id="status" class="msg"></div>
-</div>
-<div id="out"></div>
-<p class="note">⚠ Not a medical device. Never upload real patient scans. Results are not validated for clinical use and do not replace a radiologist.</p>
-</main>
-<script>
-const $=id=>document.getElementById(id);
-const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
-const COL={High:'var(--red)',Medium:'var(--amb)',Low:'var(--grn)'};
-$('key').value=sessionStorage.getItem('gk')||'';
-function status(m,bad){$('status').textContent=m;$('status').className='msg'+(bad?' err':'')}
-function section(title,text){const c=el('div','card');c.append(el('h3','',title),el('div','',text));return c}
-function render(d){
-  const r=d.result||{},out=$('out');out.replaceChildren();
-  const top=el('div','card'),big=el('div','big',r.classification||'Unknown');
-  const tag=el('span','tag',(r.risk||'?')+' risk');tag.style.color=COL[r.risk]||'var(--mut)';big.append(tag);
-  top.append(big,el('div','note','Top confidence '+(r.top_confidence||0).toFixed(1)+'%'));
-  for(const k of ['Glioma','Meningioma','No Tumor','Pituitary']){
-    const v=(r.confidence||{})[k]||0,b=el('div','bar'),t=el('div','track'),f=el('div','fill');
-    f.style.width=v+'%';t.append(f);b.append(el('span','',k),t,el('span','',v.toFixed(1)+'%'));top.append(b)}
-  out.append(top);
-  if(d.review&&d.review.flagged)out.append(section('Flagged for review ('+d.review.flag_severity+')',d.review.flag_reason||''));
-  if(r.clinical_notes)out.append(section('Clinical reasoning',r.clinical_notes));
-  if(r.recommendation)out.append(section('Recommendation',r.recommendation));
-  if(d.agent_trace&&d.agent_trace.final_summary)out.append(section('Summary',d.agent_trace.final_summary));
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NeuroScan Agent — Brain Tumor Classification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Design tokens (matches neuroscan-ai) ───────────────────────── */
+:root {
+  --bg:     #020810;
+  --bg2:    #060f1a;
+  --card:   #0a1620;
+  --bd:     #16303f;
+  --bd2:    #1e4058;
+  --fg:     #e6f1f7;
+  --mut:    #8aa0ad;
+  --acc:    #00d2ff;
+  --acc2:   #0095b8;
+  --red:    #ff5d5d;
+  --amb:    #ffb020;
+  --grn:    #35d07f;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --font-mono:    'IBM Plex Mono', monospace;
 }
-$('go').onclick=async()=>{
-  const f=$('file').files[0],k=$('key').value.trim();
-  if(!f)return status('Choose an MRI image first.',1);
-  if(!k)return status('Enter your Gemini API key.',1);
-  sessionStorage.setItem('gk',k);$('go').disabled=true;$('out').replaceChildren();
-  status('Analysing... this usually takes 20-60 seconds.');
-  const fd=new FormData();fd.append('file',f);fd.append('context',$('ctx').value);
-  try{
-    const res=await fetch('/analyze',{method:'POST',headers:{'X-Gemini-Key':k},body:fd});
-    const d=await res.json().catch(()=>({}));
-    if(res.status===422&&d.error==='not_brain_mri')status('Not a brain MRI: '+(d.detail||''),1);
-    else if(!res.ok)status(d.detail||('Request failed ('+res.status+').'),1);
-    else{status('');render(d)}
-  }catch(e){status('Network error. Please try again.',1)}
-  $('go').disabled=false;
-};
-</script></body></html>
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+
+/* ── Reset ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+a { color: var(--acc); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Canvas particle background ────────────────────────────────── */
+#canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none; opacity: .45;
+}
+
+/* ── Nav ────────────────────────────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 32px; height: 60px;
+  background: rgba(2,8,16,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--bd);
+}
+.nav-logo {
+  font-family: var(--font-mono); font-size: 15px;
+  color: var(--acc); letter-spacing: .04em;
+  display: flex; align-items: center; gap: 8px;
+}
+.nav-logo span { color: var(--mut); }
+.nav-links { display: flex; gap: 28px; }
+.nav-links a {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--mut); letter-spacing: .08em; text-transform: uppercase;
+  transition: color .2s;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--acc); text-decoration: none; }
+.nav-badge {
+  font-family: var(--font-mono); font-size: 10px;
+  padding: 3px 8px; border: 1px solid var(--bd2);
+  border-radius: 4px; color: var(--mut);
+}
+
+/* ── Sections ───────────────────────────────────────────────────── */
+section { position: relative; z-index: 1; }
+.page { display: none; min-height: 100vh; }
+.page.active { display: block; }
+
+/* ── Hero ───────────────────────────────────────────────────────── */
+.hero {
+  padding: 140px 40px 80px;
+  max-width: 900px; margin: 0 auto; text-align: center;
+}
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--acc); letter-spacing: .12em; text-transform: uppercase;
+  border: 1px solid var(--bd2); border-radius: 20px;
+  padding: 5px 14px; margin-bottom: 28px;
+}
+.hero-tag::before {
+  content: ''; width: 6px; height: 6px;
+  background: var(--acc); border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.4; transform:scale(1.4); }
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(52px, 10vw, 96px);
+  line-height: .95; letter-spacing: .02em;
+  color: var(--fg); margin-bottom: 24px;
+}
+.hero h1 em { color: var(--acc); font-style: normal; }
+.hero p {
+  font-size: 17px; color: var(--mut); max-width: 520px;
+  margin: 0 auto 40px;
+}
+.hero-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.btn-primary {
+  padding: 13px 28px; background: var(--acc); color: #00232d;
+  font-weight: 700; font-size: 14px; border: none; border-radius: 8px;
+  cursor: pointer; transition: transform .15s, box-shadow .15s;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,210,255,.25); }
+.btn-outline {
+  padding: 13px 28px; background: transparent; color: var(--fg);
+  font-size: 14px; border: 1px solid var(--bd2); border-radius: 8px;
+  cursor: pointer; transition: border-color .2s;
+}
+.btn-outline:hover { border-color: var(--acc); color: var(--acc); }
+
+/* ── Stats row ──────────────────────────────────────────────────── */
+.stats {
+  display: flex; justify-content: center; gap: 0;
+  flex-wrap: wrap; border: 1px solid var(--bd);
+  border-radius: 12px; overflow: hidden;
+  max-width: 700px; margin: 60px auto 0;
+  background: var(--card);
+}
+.stat {
+  flex: 1; min-width: 140px; padding: 20px 24px;
+  border-right: 1px solid var(--bd); text-align: center;
+}
+.stat:last-child { border-right: none; }
+.stat-val {
+  font-family: var(--font-display); font-size: 36px;
+  color: var(--acc); letter-spacing: .02em; display: block;
+}
+.stat-lbl {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--mut); letter-spacing: .1em; text-transform: uppercase;
+}
+
+/* ── How it works ───────────────────────────────────────────────── */
+.section-inner { max-width: 900px; margin: 0 auto; padding: 80px 32px; }
+.section-title {
+  font-family: var(--font-display); font-size: 42px;
+  color: var(--fg); margin-bottom: 8px; letter-spacing: .03em;
+}
+.section-sub { color: var(--mut); margin-bottom: 48px; font-size: 15px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; }
+.step {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 24px;
+}
+.step-num {
+  font-family: var(--font-mono); font-size: 11px; color: var(--acc);
+  letter-spacing: .1em; margin-bottom: 12px;
+}
+.step h3 { font-size: 16px; margin-bottom: 8px; }
+.step p { font-size: 14px; color: var(--mut); }
+
+/* ── Tumor cards ────────────────────────────────────────────────── */
+.tumor-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 16px; }
+.tumor-card {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 24px;
+  transition: border-color .2s, transform .2s;
+}
+.tumor-card:hover { transform: translateY(-3px); border-color: var(--bd2); }
+.tumor-icon { font-size: 28px; margin-bottom: 12px; display: block; }
+.tumor-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.tumor-card p { font-size: 13px; color: var(--mut); margin-bottom: 12px; }
+.risk-badge {
+  font-family: var(--font-mono); font-size: 10px;
+  padding: 3px 8px; border-radius: 4px; letter-spacing: .06em;
+}
+.risk-high   { background: rgba(255,93,93,.12);  color: var(--red); border: 1px solid rgba(255,93,93,.3); }
+.risk-medium { background: rgba(255,176,32,.12); color: var(--amb); border: 1px solid rgba(255,176,32,.3); }
+.risk-low    { background: rgba(53,208,127,.12); color: var(--grn); border: 1px solid rgba(53,208,127,.3); }
+
+/* ── Scanner page ───────────────────────────────────────────────── */
+.scanner-wrap {
+  max-width: 760px; margin: 0 auto;
+  padding: 100px 24px 80px;
+}
+.scanner-header { margin-bottom: 32px; }
+.scanner-header h2 {
+  font-family: var(--font-display); font-size: 48px;
+  letter-spacing: .03em; color: var(--fg);
+}
+.scanner-header p { color: var(--mut); margin-top: 8px; }
+.scanner-card {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 14px; padding: 28px; margin-bottom: 16px;
+}
+.field-label {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--mut); letter-spacing: .08em; text-transform: uppercase;
+  display: block; margin-bottom: 8px;
+}
+.file-drop {
+  border: 2px dashed var(--bd2); border-radius: 10px;
+  padding: 40px 20px; text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s;
+  position: relative; overflow: hidden;
+}
+.file-drop:hover, .file-drop.drag { border-color: var(--acc); background: rgba(0,210,255,.04); }
+.file-drop input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+}
+.file-drop-icon { font-size: 32px; margin-bottom: 12px; display: block; }
+.file-drop-text { color: var(--mut); font-size: 14px; }
+.file-drop-text strong { color: var(--acc); }
+.file-name {
+  display: none; font-family: var(--font-mono); font-size: 13px;
+  color: var(--acc); margin-top: 10px;
+}
+.input-field {
+  width: 100%; padding: 11px 14px; border-radius: 8px;
+  border: 1px solid var(--bd); background: #06101a;
+  color: var(--fg); font-family: var(--font-mono); font-size: 13px;
+  outline: none; transition: border-color .2s;
+}
+.input-field:focus { border-color: var(--acc); }
+.key-row { display: flex; gap: 8px; align-items: center; }
+.key-row .input-field { flex: 1; }
+.key-toggle {
+  padding: 11px 14px; background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: 8px; color: var(--mut); font-family: var(--font-mono);
+  font-size: 12px; cursor: pointer; white-space: nowrap;
+  transition: color .2s;
+}
+.key-toggle:hover { color: var(--acc); }
+.key-hint {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--mut); margin-top: 8px; display: block;
+}
+.key-hint a { color: var(--acc); }
+textarea.input-field { resize: vertical; min-height: 64px; font-family: var(--font-body); }
+.analyze-btn {
+  width: 100%; padding: 15px; margin-top: 8px;
+  background: var(--acc); color: #00232d;
+  font-weight: 700; font-size: 15px; letter-spacing: .02em;
+  border: none; border-radius: 10px; cursor: pointer;
+  transition: transform .15s, box-shadow .15s, opacity .15s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.analyze-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,210,255,.3); }
+.analyze-btn:disabled { opacity: .55; cursor: wait; }
+
+/* ── Log animation ──────────────────────────────────────────────── */
+.log-box {
+  display: none; background: #030d15;
+  border: 1px solid var(--bd); border-radius: 10px;
+  padding: 20px; margin-top: 16px;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.log-box.visible { display: block; }
+.log-line {
+  color: var(--mut); margin-bottom: 8px;
+  opacity: 0; transition: opacity .4s;
+}
+.log-line.show { opacity: 1; }
+.log-line.done { color: var(--acc); }
+.log-line::before { content: '▶ '; color: var(--bd2); }
+.log-line.done::before { color: var(--acc); }
+.spinner { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Status message ─────────────────────────────────────────────── */
+.status-msg {
+  font-family: var(--font-mono); font-size: 12px;
+  padding: 10px 14px; border-radius: 8px; margin-top: 12px;
+  display: none;
+}
+.status-msg.show { display: block; }
+.status-msg.error {
+  background: rgba(255,93,93,.08); border: 1px solid rgba(255,93,93,.3);
+  color: var(--red);
+}
+.status-msg.warn {
+  background: rgba(255,176,32,.08); border: 1px solid rgba(255,176,32,.3);
+  color: var(--amb);
+}
+
+/* ── Result card ────────────────────────────────────────────────── */
+#result-section { display: none; margin-top: 24px; }
+#result-section.show { display: block; }
+.result-main {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 14px; padding: 28px; margin-bottom: 14px;
+}
+.result-class {
+  font-family: var(--font-display); font-size: 52px;
+  letter-spacing: .03em; line-height: 1;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.result-meta {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--mut); margin-bottom: 24px; letter-spacing: .04em;
+}
+/* Confidence bars */
+.conf-bars { display: flex; flex-direction: column; gap: 10px; }
+.conf-row { display: flex; align-items: center; gap: 12px; }
+.conf-label {
+  font-family: var(--font-mono); font-size: 12px;
+  width: 94px; color: var(--mut); flex-shrink: 0;
+}
+.conf-track {
+  flex: 1; height: 8px; background: #0d1e2a;
+  border-radius: 4px; overflow: hidden;
+}
+.conf-fill {
+  height: 100%; background: var(--acc); border-radius: 4px;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+.conf-val {
+  font-family: var(--font-mono); font-size: 12px;
+  width: 46px; text-align: right; color: var(--fg);
+}
+.conf-active .conf-label { color: var(--acc); }
+.conf-active .conf-fill  { background: var(--acc); }
+.conf-active .conf-val   { color: var(--acc); font-weight: 600; }
+/* Detail cards */
+.detail-card {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 20px; margin-bottom: 12px;
+}
+.detail-card h4 {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--acc); letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.detail-card p { font-size: 14px; color: var(--mut); line-height: 1.65; }
+.flag-card {
+  background: rgba(255,176,32,.06); border: 1px solid rgba(255,176,32,.3);
+  border-radius: 12px; padding: 20px; margin-bottom: 12px;
+}
+.flag-card h4 {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--amb); letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.flag-card p { font-size: 14px; color: var(--amb); }
+.new-scan-btn {
+  width: 100%; padding: 13px; background: transparent;
+  border: 1px solid var(--bd2); border-radius: 10px;
+  color: var(--mut); font-size: 14px; cursor: pointer;
+  transition: border-color .2s, color .2s; margin-top: 4px;
+}
+.new-scan-btn:hover { border-color: var(--acc); color: var(--acc); }
+/* Disclaimer */
+.disclaimer {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--mut); border: 1px solid var(--bd);
+  border-radius: 8px; padding: 14px 16px;
+  line-height: 1.7; margin-top: 12px;
+}
+.disclaimer strong { color: var(--red); }
+
+/* ── About page ─────────────────────────────────────────────────── */
+.about-wrap { max-width: 800px; margin: 0 auto; padding: 100px 24px 80px; }
+.about-wrap h2 {
+  font-family: var(--font-display); font-size: 48px;
+  letter-spacing: .03em; margin-bottom: 8px;
+}
+.about-wrap .sub { color: var(--mut); margin-bottom: 48px; }
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; margin-bottom: 40px; }
+.about-card {
+  background: var(--card); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 24px;
+}
+.about-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.about-card p { font-size: 13px; color: var(--mut); }
+.links-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.link-chip {
+  padding: 9px 18px; border: 1px solid var(--bd2);
+  border-radius: 8px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--acc); transition: background .2s;
+}
+.link-chip:hover { background: rgba(0,210,255,.08); text-decoration: none; }
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+footer {
+  position: relative; z-index: 1;
+  border-top: 1px solid var(--bd); padding: 28px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+}
+footer p { font-family: var(--font-mono); font-size: 11px; color: var(--mut); }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media(max-width:600px) {
+  nav { padding: 0 16px; }
+  .nav-links { gap: 16px; }
+  .nav-badge { display: none; }
+  .hero { padding: 110px 20px 60px; }
+  .scanner-wrap, .about-wrap { padding: 90px 16px 60px; }
+  .section-inner { padding: 60px 20px; }
+  .result-class { font-size: 38px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+    </svg>
+    NEUROSCAN <span>AGENT</span>
+  </div>
+  <div class="nav-links">
+    <a href="#" class="active" onclick="showPage('home',this)">Home</a>
+    <a href="#" onclick="showPage('scanner',this)">Scanner</a>
+    <a href="#" onclick="showPage('about',this)">About</a>
+  </div>
+  <div class="nav-badge">IEEE SCEECS 2026</div>
+</nav>
+
+<!-- ═══ HOME PAGE ═══════════════════════════════════════════════ -->
+<div id="page-home" class="page active">
+  <section class="hero">
+    <div class="hero-tag">IEEE SCEECS 2026 · Peer-reviewed Research Prototype</div>
+    <h1>DETECT<br><em>BRAIN</em><br>TUMORS</h1>
+    <p>Upload any brain MRI scan and get AI-powered classification — Glioma, Meningioma, Pituitary, or No Tumor — backed by published research achieving 99% accuracy.</p>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="showPage('scanner', document.querySelectorAll('.nav-links a')[1])">Analyze MRI Scan →</button>
+      <button class="btn-outline" onclick="showPage('about', document.querySelectorAll('.nav-links a')[2])">About the Research</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><span class="stat-val">99%</span><span class="stat-lbl">Accuracy</span></div>
+      <div class="stat"><span class="stat-val">0.999</span><span class="stat-lbl">AUC Score</span></div>
+      <div class="stat"><span class="stat-val">16K+</span><span class="stat-lbl">Training Images</span></div>
+      <div class="stat"><span class="stat-val">4</span><span class="stat-lbl">Tumor Classes</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-inner">
+      <div class="section-title">HOW IT WORKS</div>
+      <div class="section-sub">Three steps to classification</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01 — UPLOAD</div>
+          <h3>Drop Your MRI</h3>
+          <p>PNG, JPG, WEBP or BMP. Any resolution. T1, T2, axial or coronal. No special software needed.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">02 — ANALYSE</div>
+          <h3>AI Reasoning</h3>
+          <p>Gemini 2.0 visually analyses the scan, calls the classification model, and generates clinical reasoning.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">03 — REPORT</div>
+          <h3>Full Report</h3>
+          <p>Tumor type, per-class confidence scores, risk level, clinical notes, and a plain-English recommendation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-inner">
+      <div class="section-title">FOUR CLINICAL CATEGORIES</div>
+      <div class="section-sub">Detection categories covered by the model</div>
+      <div class="tumor-grid">
+        <div class="tumor-card">
+          <span class="tumor-icon">🔴</span>
+          <h3>Glioma</h3>
+          <p>Arising from glial cells. Most aggressive primary brain tumor. Requires immediate specialist referral.</p>
+          <span class="risk-badge risk-high">HIGH RISK</span>
+        </div>
+        <div class="tumor-card">
+          <span class="tumor-icon">🟠</span>
+          <h3>Meningioma</h3>
+          <p>Arises from the meninges. Usually benign and slow-growing. Often surgically treatable.</p>
+          <span class="risk-badge risk-medium">MEDIUM RISK</span>
+        </div>
+        <div class="tumor-card">
+          <span class="tumor-icon">🟣</span>
+          <h3>Pituitary</h3>
+          <p>Tumor on the pituitary gland. Disrupts hormones. Usually non-cancerous. Treated with surgery or medication.</p>
+          <span class="risk-badge risk-medium">MEDIUM RISK</span>
+        </div>
+        <div class="tumor-card">
+          <span class="tumor-icon">🟢</span>
+          <h3>No Tumor</h3>
+          <p>Healthy brain tissue confirmed. No detectable tumor mass. Routine monitoring may be recommended.</p>
+          <span class="risk-badge risk-low">LOW RISK</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══ SCANNER PAGE ═════════════════════════════════════════════ -->
+<div id="page-scanner" class="page">
+  <div class="scanner-wrap">
+    <div class="scanner-header">
+      <h2>MRI SCAN ANALYSER</h2>
+      <p>Upload a brain MRI and get instant AI-powered classification. Bring your own free Gemini key.</p>
+    </div>
+
+    <div class="scanner-card">
+      <label class="field-label">MRI Image — PNG · JPG · WEBP · BMP (max 10 MB)</label>
+      <div class="file-drop" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*">
+        <span class="file-drop-icon">🧠</span>
+        <div class="file-drop-text">
+          <strong>Drop MRI scan here</strong> or click to select<br>
+          <small style="color:var(--mut)">Any resolution — axial, coronal, sagittal</small>
+        </div>
+        <div class="file-name" id="file-name"></div>
+      </div>
+    </div>
+
+    <div class="scanner-card">
+      <label class="field-label">Gemini API Key — Required</label>
+      <div class="key-row">
+        <input type="password" id="key-input" class="input-field" placeholder="Paste your Gemini API key" autocomplete="off">
+        <button class="key-toggle" id="key-toggle">SHOW</button>
+      </div>
+      <span class="key-hint">
+        Free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> · 
+        Sent only with your request · Never stored on the server
+      </span>
+    </div>
+
+    <div class="scanner-card">
+      <label class="field-label">Patient Context (Optional)</label>
+      <textarea class="input-field" id="ctx-input" rows="2" maxlength="500" placeholder="e.g. 45F, headaches for 3 months — do NOT enter real patient data"></textarea>
+    </div>
+
+    <button class="analyze-btn" id="analyze-btn">
+      <span id="btn-text">▶  Analyze MRI Scan</span>
+    </button>
+
+    <div class="log-box" id="log-box">
+      <div class="log-line" id="log1">Validating image — checking MRI format...</div>
+      <div class="log-line" id="log2">Extracting visual features...</div>
+      <div class="log-line" id="log3">Running classification model...</div>
+      <div class="log-line" id="log4">Generating clinical reasoning...</div>
+      <div class="log-line" id="log5">Building diagnostic report...</div>
+    </div>
+
+    <div class="status-msg" id="status-msg"></div>
+
+    <div id="result-section">
+      <div class="result-main" id="result-main"><!-- filled by JS --></div>
+      <div id="detail-cards"><!-- filled by JS --></div>
+      <button class="new-scan-btn" onclick="resetScanner()">✕  Upload New Scan</button>
+      <div class="disclaimer">
+        <strong>⚠ RESEARCH PROTOTYPE · NOT FOR CLINICAL USE</strong><br>
+        This analysis is generated by an AI model and is intended for research and educational purposes only.
+        It does not constitute medical advice and must not replace diagnosis by a licensed radiologist or clinician.
+        If you have clinical concerns, consult a qualified medical professional immediately.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ABOUT PAGE ═══════════════════════════════════════════════ -->
+<div id="page-about" class="page">
+  <div class="about-wrap">
+    <h2>ABOUT THE PROJECT</h2>
+    <p class="sub">Published IEEE research turned into a working AI agent.</p>
+
+    <div class="about-grid">
+      <div class="about-card">
+        <h3>📄 IEEE Publication</h3>
+        <p>Published at SCEECS 2026. Deep Learning Based Brain Tumor Classification Using Orange Data Analytics. 99% accuracy, AUC 0.999 in 10-fold cross-validation.</p>
+      </div>
+      <div class="about-card">
+        <h3>🧠 Methodology</h3>
+        <p>InceptionV3 feature extraction (2048-dim vectors) → PCA dimensionality reduction → Neural Network classifier trained on 16,087 MRI images from 3 sources.</p>
+      </div>
+      <div class="about-card">
+        <h3>🤖 Agent Architecture</h3>
+        <p>Gemini 2.0 Flash with function calling. ReAct loop: classify → explain → flag → report. Automatic fallback across 6 free Gemini models if one is busy.</p>
+      </div>
+      <div class="about-card">
+        <h3>🆓 100% Free</h3>
+        <p>Gemini API (free tier at aistudio.google.com) + OpenRouter free vision models + Oracle Always Free VM. No credit card needed for the Gemini key.</p>
+      </div>
+    </div>
+
+    <div class="section-title" style="font-size:28px;margin-bottom:20px">LINKS</div>
+    <div class="links-row" style="margin-bottom:48px">
+      <a class="link-chip" href="https://doi.org/10.1109/SCEECS68810.2026.11429884" target="_blank">IEEE Paper →</a>
+      <a class="link-chip" href="https://monishmagesh.github.io/neuroscan-ai" target="_blank">Web Demo →</a>
+      <a class="link-chip" href="https://github.com/MonishMagesh/neuroscan-agent" target="_blank">GitHub →</a>
+      <a class="link-chip" href="https://aistudio.google.com/apikey" target="_blank">Get Free Key →</a>
+    </div>
+
+    <div class="section-title" style="font-size:28px;margin-bottom:20px">DATASET</div>
+    <div class="about-grid" style="margin-bottom:48px">
+      <div class="about-card"><h3>Kaggle — 7,023</h3><p>4 clinical classes. Widely used deep learning benchmark dataset.</p></div>
+      <div class="about-card"><h3>BRISC 2025 — 6,000</h3><p>T1 and T2-weighted MRI sequences. High-quality clinical scans.</p></div>
+      <div class="about-card"><h3>FigShare — 3,064</h3><p>Expert-annotated tumor locations and class labels.</p></div>
+    </div>
+
+    <div class="disclaimer">
+      <strong>⚠ IMPORTANT DISCLAIMER</strong><br>
+      NeuroScan Agent is a research prototype. It is NOT a certified medical device and must NOT be used as the sole basis for any clinical decision.
+      Always consult a qualified radiologist, neurologist, or medical specialist for brain tumor diagnosis and treatment planning.
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>NEUROSCAN AGENT · IEEE SCEECS 2026 · SRM IST KATTANKULATHUR</p>
+  <p>MONISH MAGESH · © 2026 · RESEARCH PROTOTYPE · NOT FOR CLINICAL USE</p>
+</footer>
+
+<script>
+// ── Page router ───────────────────────────────────────────────────
+function showPage(id, link) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (link) link.classList.add('active');
+  window.scrollTo(0, 0);
+  return false;
+}
+
+// ── Particle canvas ───────────────────────────────────────────────
+(function () {
+  const cv = document.getElementById('canvas');
+  const ctx = cv.getContext('2d');
+  let W, H, nodes = [];
+  function resize() {
+    W = cv.width  = window.innerWidth;
+    H = cv.height = window.innerHeight;
+  }
+  function init() {
+    resize();
+    nodes = Array.from({length: 55}, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
+      r: 1.5 + Math.random() * 1.5
+    }));
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    nodes.forEach(n => {
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < 0 || n.x > W) n.vx *= -1;
+      if (n.y < 0 || n.y > H) n.vy *= -1;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#00d2ff';
+      ctx.fill();
+    });
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const d  = Math.sqrt(dx*dx + dy*dy);
+        if (d < 120) {
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.strokeStyle = `rgba(0,210,255,${(1 - d/120) * .18})`;
+          ctx.lineWidth = .6;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize', resize);
+  init(); draw();
+})();
+
+// ── File drop ─────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileName  = document.getElementById('file-name');
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) {
+    fileName.textContent = '📎 ' + fileInput.files[0].name;
+    fileName.style.display = 'block';
+    dropZone.querySelector('.file-drop-text').style.display = 'none';
+  }
+});
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    const dt = new DataTransfer(); dt.items.add(f);
+    fileInput.files = dt.files;
+    fileName.textContent = '📎 ' + f.name;
+    fileName.style.display = 'block';
+    dropZone.querySelector('.file-drop-text').style.display = 'none';
+  }
+});
+
+// ── Key toggle ────────────────────────────────────────────────────
+const keyInput  = document.getElementById('key-input');
+const keyToggle = document.getElementById('key-toggle');
+keyToggle.addEventListener('click', () => {
+  const show = keyInput.type === 'password';
+  keyInput.type = show ? 'text' : 'password';
+  keyToggle.textContent = show ? 'HIDE' : 'SHOW';
+});
+keyInput.value = sessionStorage.getItem('nsa_key') || '';
+
+// ── Log animation ─────────────────────────────────────────────────
+function runLogs(done) {
+  const lines = ['log1','log2','log3','log4','log5'];
+  let i = 0;
+  const iv = setInterval(() => {
+    if (i > 0) document.getElementById(lines[i-1]).classList.add('done');
+    if (i < lines.length) {
+      document.getElementById(lines[i]).classList.add('show');
+      i++;
+    } else {
+      clearInterval(iv);
+      done && done();
+    }
+  }, 900);
+  return iv;
+}
+function resetLogs() {
+  ['log1','log2','log3','log4','log5'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('show','done');
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+const RISK_COL = { High:'var(--red)', Medium:'var(--amb)', Low:'var(--grn)' };
+function showStatus(msg, type) {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg; el.className = 'status-msg show ' + (type||'error');
+}
+function hideStatus() {
+  document.getElementById('status-msg').className = 'status-msg';
+}
+function confBar(pct, active) {
+  return `<div class="conf-row${active?' conf-active':''}">
+    <span class="conf-label">${active?'<b>'+active+'</b>':active||''}</span>
+    <div class="conf-track"><div class="conf-fill" style="width:${pct}%"></div></div>
+    <span class="conf-val">${pct.toFixed(1)}%</span>
+  </div>`;
+}
+
+// ── Render result ─────────────────────────────────────────────────
+function renderResult(d) {
+  const r  = d.result  || {};
+  const rv = d.review  || {};
+  const tr = (d.agent_trace || {});
+  const cls  = r.classification || 'Unknown';
+  const risk = r.risk || '?';
+  const conf = r.confidence || {};
+  const top  = r.top_confidence || 0;
+  const col  = RISK_COL[risk] || 'var(--mut)';
+
+  // Main card
+  const main = document.getElementById('result-main');
+  main.innerHTML = `
+    <div class="result-class" style="color:${col}">
+      ${cls}
+      <span style="font-family:var(--font-mono);font-size:13px;color:${col};border:1px solid ${col};
+            border-radius:6px;padding:3px 10px;">${risk} RISK</span>
+    </div>
+    <div class="result-meta">TOP CONFIDENCE ${top.toFixed(1)}% · SESSION ${d.session_id||''}</div>
+    <div class="conf-bars">
+      ${['Glioma','Meningioma','No Tumor','Pituitary'].map(k => {
+          const v = conf[k] || 0;
+          const active = k === cls;
+          return `<div class="conf-row${active?' conf-active':''}">
+            <span class="conf-label" style="${active?'color:var(--acc)':''}">${k}</span>
+            <div class="conf-track"><div class="conf-fill" style="width:${v}%;${active?'':'background:var(--bd2)'}"></div></div>
+            <span class="conf-val" style="${active?'color:var(--acc);font-weight:600':''}">${v.toFixed(1)}%</span>
+          </div>`;
+        }).join('')}
+    </div>`;
+
+  // Detail cards
+  const details = document.getElementById('detail-cards');
+  details.innerHTML = '';
+  if (rv.flagged) {
+    details.innerHTML += `<div class="flag-card">
+      <h4>⚠ FLAGGED FOR REVIEW — ${(rv.flag_severity||'').toUpperCase()} PRIORITY</h4>
+      <p>${rv.flag_reason||''}</p></div>`;
+  }
+  if (r.clinical_notes) {
+    details.innerHTML += `<div class="detail-card">
+      <h4>Clinical Reasoning</h4><p>${r.clinical_notes}</p></div>`;
+  }
+  if (r.recommendation) {
+    details.innerHTML += `<div class="detail-card">
+      <h4>Recommendation</h4><p>${r.recommendation}</p></div>`;
+  }
+  if (tr.final_summary) {
+    details.innerHTML += `<div class="detail-card">
+      <h4>Agent Summary</h4><p>${tr.final_summary}</p></div>`;
+  }
+
+  document.getElementById('result-section').classList.add('show');
+}
+
+// ── Reset scanner ─────────────────────────────────────────────────
+function resetScanner() {
+  fileInput.value = '';
+  fileName.style.display = 'none';
+  dropZone.querySelector('.file-drop-text').style.display = '';
+  document.getElementById('result-section').classList.remove('show');
+  document.getElementById('log-box').classList.remove('visible');
+  document.getElementById('analyze-btn').disabled = false;
+  document.getElementById('btn-text').textContent = '▶  Analyze MRI Scan';
+  resetLogs(); hideStatus();
+}
+
+// ── Main analyze ──────────────────────────────────────────────────
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  const key  = keyInput.value.trim();
+  const ctx  = document.getElementById('ctx-input').value;
+
+  if (!file) return showStatus('Choose an MRI image first.', 'error');
+  if (!key)  return showStatus('Enter your Gemini API key.', 'error');
+  hideStatus();
+  sessionStorage.setItem('nsa_key', key);
+
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('btn-text').innerHTML = '<span class="spinner">⟳</span> Analysing...';
+  document.getElementById('result-section').classList.remove('show');
+  document.getElementById('log-box').classList.add('visible');
+  resetLogs();
+  runLogs();
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('context', ctx);
+
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'X-Gemini-Key': key },
+      body: fd
+    });
+    const data = await res.json().catch(() => ({}));
+    document.getElementById('log-box').classList.remove('visible');
+    if (res.status === 422 && data.error === 'not_brain_mri') {
+      showStatus('Not a brain MRI scan: ' + (data.detail || ''), 'warn');
+    } else if (!res.ok) {
+      showStatus(data.detail || ('Request failed (' + res.status + ').'), 'error');
+    } else {
+      renderResult(data);
+    }
+  } catch (e) {
+    showStatus('Network error — please try again.', 'error');
+  }
+
+  document.getElementById('analyze-btn').disabled = false;
+  document.getElementById('btn-text').textContent = '▶  Analyze MRI Scan';
+});
+</script>
+</body>
+</html>
