@@ -2,877 +2,525 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NeuroScan Agent — Brain Tumor Classification</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NeuroScan Agent — Brain Tumor Detection</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* ── Design tokens (matches neuroscan-ai) ───────────────────────── */
-:root {
-  --bg:     #020810;
-  --bg2:    #060f1a;
-  --card:   #0a1620;
-  --bd:     #16303f;
-  --bd2:    #1e4058;
-  --fg:     #e6f1f7;
-  --mut:    #8aa0ad;
-  --acc:    #00d2ff;
-  --acc2:   #0095b8;
-  --red:    #ff5d5d;
-  --amb:    #ffb020;
-  --grn:    #35d07f;
-  --font-display: 'Bebas Neue', sans-serif;
-  --font-body:    'DM Sans', sans-serif;
-  --font-mono:    'IBM Plex Mono', monospace;
-}
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
-
-/* ── Reset ──────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.6;
-  overflow-x: hidden;
-}
-a { color: var(--acc); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-/* ── Canvas particle background ────────────────────────────────── */
-#canvas {
-  position: fixed; inset: 0; z-index: 0;
-  pointer-events: none; opacity: .45;
-}
-
-/* ── Nav ────────────────────────────────────────────────────────── */
-nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 32px; height: 60px;
-  background: rgba(2,8,16,.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--bd);
-}
-.nav-logo {
-  font-family: var(--font-mono); font-size: 15px;
-  color: var(--acc); letter-spacing: .04em;
-  display: flex; align-items: center; gap: 8px;
-}
-.nav-logo span { color: var(--mut); }
-.nav-links { display: flex; gap: 28px; }
-.nav-links a {
-  font-family: var(--font-mono); font-size: 12px;
-  color: var(--mut); letter-spacing: .08em; text-transform: uppercase;
-  transition: color .2s;
-}
-.nav-links a:hover, .nav-links a.active { color: var(--acc); text-decoration: none; }
-.nav-badge {
-  font-family: var(--font-mono); font-size: 10px;
-  padding: 3px 8px; border: 1px solid var(--bd2);
-  border-radius: 4px; color: var(--mut);
-}
-
-/* ── Sections ───────────────────────────────────────────────────── */
-section { position: relative; z-index: 1; }
-.page { display: none; min-height: 100vh; }
-.page.active { display: block; }
-
-/* ── Hero ───────────────────────────────────────────────────────── */
-.hero {
-  padding: 140px 40px 80px;
-  max-width: 900px; margin: 0 auto; text-align: center;
-}
-.hero-tag {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--acc); letter-spacing: .12em; text-transform: uppercase;
-  border: 1px solid var(--bd2); border-radius: 20px;
-  padding: 5px 14px; margin-bottom: 28px;
-}
-.hero-tag::before {
-  content: ''; width: 6px; height: 6px;
-  background: var(--acc); border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%,100% { opacity:1; transform:scale(1); }
-  50%      { opacity:.4; transform:scale(1.4); }
-}
-.hero h1 {
-  font-family: var(--font-display);
-  font-size: clamp(52px, 10vw, 96px);
-  line-height: .95; letter-spacing: .02em;
-  color: var(--fg); margin-bottom: 24px;
-}
-.hero h1 em { color: var(--acc); font-style: normal; }
-.hero p {
-  font-size: 17px; color: var(--mut); max-width: 520px;
-  margin: 0 auto 40px;
-}
-.hero-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-.btn-primary {
-  padding: 13px 28px; background: var(--acc); color: #00232d;
-  font-weight: 700; font-size: 14px; border: none; border-radius: 8px;
-  cursor: pointer; transition: transform .15s, box-shadow .15s;
-}
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,210,255,.25); }
-.btn-outline {
-  padding: 13px 28px; background: transparent; color: var(--fg);
-  font-size: 14px; border: 1px solid var(--bd2); border-radius: 8px;
-  cursor: pointer; transition: border-color .2s;
-}
-.btn-outline:hover { border-color: var(--acc); color: var(--acc); }
-
-/* ── Stats row ──────────────────────────────────────────────────── */
-.stats {
-  display: flex; justify-content: center; gap: 0;
-  flex-wrap: wrap; border: 1px solid var(--bd);
-  border-radius: 12px; overflow: hidden;
-  max-width: 700px; margin: 60px auto 0;
-  background: var(--card);
-}
-.stat {
-  flex: 1; min-width: 140px; padding: 20px 24px;
-  border-right: 1px solid var(--bd); text-align: center;
-}
-.stat:last-child { border-right: none; }
-.stat-val {
-  font-family: var(--font-display); font-size: 36px;
-  color: var(--acc); letter-spacing: .02em; display: block;
-}
-.stat-lbl {
-  font-family: var(--font-mono); font-size: 10px;
-  color: var(--mut); letter-spacing: .1em; text-transform: uppercase;
-}
-
-/* ── How it works ───────────────────────────────────────────────── */
-.section-inner { max-width: 900px; margin: 0 auto; padding: 80px 32px; }
-.section-title {
-  font-family: var(--font-display); font-size: 42px;
-  color: var(--fg); margin-bottom: 8px; letter-spacing: .03em;
-}
-.section-sub { color: var(--mut); margin-bottom: 48px; font-size: 15px; }
-.steps { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; }
-.step {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 12px; padding: 24px;
-}
-.step-num {
-  font-family: var(--font-mono); font-size: 11px; color: var(--acc);
-  letter-spacing: .1em; margin-bottom: 12px;
-}
-.step h3 { font-size: 16px; margin-bottom: 8px; }
-.step p { font-size: 14px; color: var(--mut); }
-
-/* ── Tumor cards ────────────────────────────────────────────────── */
-.tumor-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 16px; }
-.tumor-card {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 12px; padding: 24px;
-  transition: border-color .2s, transform .2s;
-}
-.tumor-card:hover { transform: translateY(-3px); border-color: var(--bd2); }
-.tumor-icon { font-size: 28px; margin-bottom: 12px; display: block; }
-.tumor-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-.tumor-card p { font-size: 13px; color: var(--mut); margin-bottom: 12px; }
-.risk-badge {
-  font-family: var(--font-mono); font-size: 10px;
-  padding: 3px 8px; border-radius: 4px; letter-spacing: .06em;
-}
-.risk-high   { background: rgba(255,93,93,.12);  color: var(--red); border: 1px solid rgba(255,93,93,.3); }
-.risk-medium { background: rgba(255,176,32,.12); color: var(--amb); border: 1px solid rgba(255,176,32,.3); }
-.risk-low    { background: rgba(53,208,127,.12); color: var(--grn); border: 1px solid rgba(53,208,127,.3); }
-
-/* ── Scanner page ───────────────────────────────────────────────── */
-.scanner-wrap {
-  max-width: 760px; margin: 0 auto;
-  padding: 100px 24px 80px;
-}
-.scanner-header { margin-bottom: 32px; }
-.scanner-header h2 {
-  font-family: var(--font-display); font-size: 48px;
-  letter-spacing: .03em; color: var(--fg);
-}
-.scanner-header p { color: var(--mut); margin-top: 8px; }
-.scanner-card {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 14px; padding: 28px; margin-bottom: 16px;
-}
-.field-label {
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--mut); letter-spacing: .08em; text-transform: uppercase;
-  display: block; margin-bottom: 8px;
-}
-.file-drop {
-  border: 2px dashed var(--bd2); border-radius: 10px;
-  padding: 40px 20px; text-align: center; cursor: pointer;
-  transition: border-color .2s, background .2s;
-  position: relative; overflow: hidden;
-}
-.file-drop:hover, .file-drop.drag { border-color: var(--acc); background: rgba(0,210,255,.04); }
-.file-drop input[type=file] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
-}
-.file-drop-icon { font-size: 32px; margin-bottom: 12px; display: block; }
-.file-drop-text { color: var(--mut); font-size: 14px; }
-.file-drop-text strong { color: var(--acc); }
-.file-name {
-  display: none; font-family: var(--font-mono); font-size: 13px;
-  color: var(--acc); margin-top: 10px;
-}
-.input-field {
-  width: 100%; padding: 11px 14px; border-radius: 8px;
-  border: 1px solid var(--bd); background: #06101a;
-  color: var(--fg); font-family: var(--font-mono); font-size: 13px;
-  outline: none; transition: border-color .2s;
-}
-.input-field:focus { border-color: var(--acc); }
-.key-row { display: flex; gap: 8px; align-items: center; }
-.key-row .input-field { flex: 1; }
-.key-toggle {
-  padding: 11px 14px; background: var(--bg2); border: 1px solid var(--bd);
-  border-radius: 8px; color: var(--mut); font-family: var(--font-mono);
-  font-size: 12px; cursor: pointer; white-space: nowrap;
-  transition: color .2s;
-}
-.key-toggle:hover { color: var(--acc); }
-.key-hint {
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--mut); margin-top: 8px; display: block;
-}
-.key-hint a { color: var(--acc); }
-textarea.input-field { resize: vertical; min-height: 64px; font-family: var(--font-body); }
-.analyze-btn {
-  width: 100%; padding: 15px; margin-top: 8px;
-  background: var(--acc); color: #00232d;
-  font-weight: 700; font-size: 15px; letter-spacing: .02em;
-  border: none; border-radius: 10px; cursor: pointer;
-  transition: transform .15s, box-shadow .15s, opacity .15s;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-}
-.analyze-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,210,255,.3); }
-.analyze-btn:disabled { opacity: .55; cursor: wait; }
-
-/* ── Log animation ──────────────────────────────────────────────── */
-.log-box {
-  display: none; background: #030d15;
-  border: 1px solid var(--bd); border-radius: 10px;
-  padding: 20px; margin-top: 16px;
-  font-family: var(--font-mono); font-size: 12px;
-}
-.log-box.visible { display: block; }
-.log-line {
-  color: var(--mut); margin-bottom: 8px;
-  opacity: 0; transition: opacity .4s;
-}
-.log-line.show { opacity: 1; }
-.log-line.done { color: var(--acc); }
-.log-line::before { content: '▶ '; color: var(--bd2); }
-.log-line.done::before { color: var(--acc); }
-.spinner { display: inline-block; animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Status message ─────────────────────────────────────────────── */
-.status-msg {
-  font-family: var(--font-mono); font-size: 12px;
-  padding: 10px 14px; border-radius: 8px; margin-top: 12px;
-  display: none;
-}
-.status-msg.show { display: block; }
-.status-msg.error {
-  background: rgba(255,93,93,.08); border: 1px solid rgba(255,93,93,.3);
-  color: var(--red);
-}
-.status-msg.warn {
-  background: rgba(255,176,32,.08); border: 1px solid rgba(255,176,32,.3);
-  color: var(--amb);
-}
-
-/* ── Result card ────────────────────────────────────────────────── */
-#result-section { display: none; margin-top: 24px; }
-#result-section.show { display: block; }
-.result-main {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 14px; padding: 28px; margin-bottom: 14px;
-}
-.result-class {
-  font-family: var(--font-display); font-size: 52px;
-  letter-spacing: .03em; line-height: 1;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-.result-meta {
-  font-family: var(--font-mono); font-size: 12px;
-  color: var(--mut); margin-bottom: 24px; letter-spacing: .04em;
-}
-/* Confidence bars */
-.conf-bars { display: flex; flex-direction: column; gap: 10px; }
-.conf-row { display: flex; align-items: center; gap: 12px; }
-.conf-label {
-  font-family: var(--font-mono); font-size: 12px;
-  width: 94px; color: var(--mut); flex-shrink: 0;
-}
-.conf-track {
-  flex: 1; height: 8px; background: #0d1e2a;
-  border-radius: 4px; overflow: hidden;
-}
-.conf-fill {
-  height: 100%; background: var(--acc); border-radius: 4px;
-  transition: width .8s cubic-bezier(.4,0,.2,1);
-}
-.conf-val {
-  font-family: var(--font-mono); font-size: 12px;
-  width: 46px; text-align: right; color: var(--fg);
-}
-.conf-active .conf-label { color: var(--acc); }
-.conf-active .conf-fill  { background: var(--acc); }
-.conf-active .conf-val   { color: var(--acc); font-weight: 600; }
-/* Detail cards */
-.detail-card {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 12px; padding: 20px; margin-bottom: 12px;
-}
-.detail-card h4 {
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--acc); letter-spacing: .1em; text-transform: uppercase;
-  margin-bottom: 10px;
-}
-.detail-card p { font-size: 14px; color: var(--mut); line-height: 1.65; }
-.flag-card {
-  background: rgba(255,176,32,.06); border: 1px solid rgba(255,176,32,.3);
-  border-radius: 12px; padding: 20px; margin-bottom: 12px;
-}
-.flag-card h4 {
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--amb); letter-spacing: .1em; text-transform: uppercase;
-  margin-bottom: 10px;
-}
-.flag-card p { font-size: 14px; color: var(--amb); }
-.new-scan-btn {
-  width: 100%; padding: 13px; background: transparent;
-  border: 1px solid var(--bd2); border-radius: 10px;
-  color: var(--mut); font-size: 14px; cursor: pointer;
-  transition: border-color .2s, color .2s; margin-top: 4px;
-}
-.new-scan-btn:hover { border-color: var(--acc); color: var(--acc); }
-/* Disclaimer */
-.disclaimer {
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--mut); border: 1px solid var(--bd);
-  border-radius: 8px; padding: 14px 16px;
-  line-height: 1.7; margin-top: 12px;
-}
-.disclaimer strong { color: var(--red); }
-
-/* ── About page ─────────────────────────────────────────────────── */
-.about-wrap { max-width: 800px; margin: 0 auto; padding: 100px 24px 80px; }
-.about-wrap h2 {
-  font-family: var(--font-display); font-size: 48px;
-  letter-spacing: .03em; margin-bottom: 8px;
-}
-.about-wrap .sub { color: var(--mut); margin-bottom: 48px; }
-.about-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 16px; margin-bottom: 40px; }
-.about-card {
-  background: var(--card); border: 1px solid var(--bd);
-  border-radius: 12px; padding: 24px;
-}
-.about-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-.about-card p { font-size: 13px; color: var(--mut); }
-.links-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.link-chip {
-  padding: 9px 18px; border: 1px solid var(--bd2);
-  border-radius: 8px; font-family: var(--font-mono); font-size: 12px;
-  color: var(--acc); transition: background .2s;
-}
-.link-chip:hover { background: rgba(0,210,255,.08); text-decoration: none; }
-
-/* ── Footer ─────────────────────────────────────────────────────── */
-footer {
-  position: relative; z-index: 1;
-  border-top: 1px solid var(--bd); padding: 28px 32px;
-  display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; gap: 12px;
-}
-footer p { font-family: var(--font-mono); font-size: 11px; color: var(--mut); }
-
-/* ── Responsive ─────────────────────────────────────────────────── */
-@media(max-width:600px) {
-  nav { padding: 0 16px; }
-  .nav-links { gap: 16px; }
-  .nav-badge { display: none; }
-  .hero { padding: 110px 20px 60px; }
-  .scanner-wrap, .about-wrap { padding: 90px 16px 60px; }
-  .section-inner { padding: 60px 20px; }
-  .result-class { font-size: 38px; }
+:root{--bg:#020810;--bg2:#060f1a;--card:#0a1620;--bd:#16303f;--bd2:#1e4058;--fg:#e6f1f7;--mut:#8aa0ad;--acc:#00d2ff;--acc2:#0095b8;--red:#ff5d5d;--amb:#ffb020;--grn:#35d07f;--display:'Bebas Neue',sans-serif;--body:'DM Sans',sans-serif;--mono:'IBM Plex Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6;overflow-x:hidden}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+#canvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.4}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:58px;background:rgba(2,8,16,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--bd)}
+.nav-brand{font-family:var(--mono);font-size:14px;color:var(--acc);letter-spacing:.05em;display:flex;align-items:center;gap:10px}
+.nav-brand svg{opacity:.8}
+.nav-brand span{color:var(--mut)}
+.nav-links{display:flex;gap:24px}
+.nav-links a{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.1em;text-transform:uppercase;padding:4px 0;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
+.nav-links a:hover,.nav-links a.active{color:var(--acc);border-color:var(--acc);text-decoration:none}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-badge{font-family:var(--mono);font-size:10px;padding:4px 10px;border:1px solid var(--bd2);border-radius:4px;color:var(--mut)}
+.nav-cta{font-family:var(--mono);font-size:11px;padding:7px 14px;border:1px solid var(--acc);border-radius:6px;color:var(--acc);cursor:pointer;background:transparent;transition:background .2s}
+.nav-cta:hover{background:rgba(0,210,255,.08)}
+.page{display:none;position:relative;z-index:1}
+.page.active{display:block}
+/* HOME */
+.hero{padding:130px 32px 70px;max-width:960px;margin:0 auto;text-align:center}
+.hero-chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--bd2);border-radius:20px;padding:5px 16px;margin-bottom:30px}
+.hero-chip::before{content:'';width:6px;height:6px;background:var(--acc);border-radius:50%;animation:blink 2s infinite}
+.hero-chip-warn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--amb);letter-spacing:.1em;border:1px solid rgba(255,176,32,.3);border-radius:20px;padding:4px 14px;margin-bottom:20px}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(1.5)}}
+.hero h1{font-family:var(--display);font-size:clamp(56px,11vw,104px);line-height:.92;letter-spacing:.02em;color:var(--fg);margin-bottom:26px}
+.hero h1 em{color:var(--acc);font-style:normal}
+.hero-sub{font-size:17px;color:var(--mut);max-width:540px;margin:0 auto 36px}
+.btn-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn-primary{padding:13px 26px;background:var(--acc);color:#00232d;font-weight:700;font-size:14px;border:none;border-radius:8px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,210,255,.28)}
+.btn-ghost{padding:13px 26px;background:transparent;color:var(--fg);font-size:14px;border:1px solid var(--bd2);border-radius:8px;cursor:pointer;transition:border-color .2s,color .2s}
+.btn-ghost:hover{border-color:var(--acc);color:var(--acc)}
+/* animated badges */
+.anim-badges{display:flex;justify-content:center;gap:20px;margin-top:52px;flex-wrap:wrap}
+.anim-badge{display:flex;flex-direction:column;align-items:center;gap:4px}
+.anim-val{font-family:var(--display);font-size:38px;color:var(--acc);letter-spacing:.02em}
+.anim-lbl{font-family:var(--mono);font-size:10px;color:var(--mut);letter-spacing:.1em;text-transform:uppercase}
+.anim-badge-card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:18px 28px;text-align:center}
+/* section */
+.sec{max-width:940px;margin:0 auto;padding:80px 28px}
+.sec-chip{font-family:var(--mono);font-size:10px;color:var(--acc);letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px}
+.sec h2{font-family:var(--display);font-size:46px;letter-spacing:.03em;color:var(--fg);margin-bottom:8px}
+.sec-sub{color:var(--mut);font-size:15px;margin-bottom:46px}
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.step{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:28px}
+.step-n{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.1em;margin-bottom:14px}
+.step h3{font-size:16px;font-weight:600;margin-bottom:10px}
+.step p{font-size:14px;color:var(--mut);line-height:1.65}
+/* tumor cards */
+.tumor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+.tc{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:26px;transition:transform .2s,border-color .2s}
+.tc:hover{transform:translateY(-3px);border-color:var(--bd2)}
+.tc-icon{font-size:30px;margin-bottom:14px;display:block}
+.tc h3{font-size:15px;font-weight:600;margin-bottom:8px}
+.tc p{font-size:13px;color:var(--mut);margin-bottom:14px;line-height:1.6}
+.badge{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:4px;letter-spacing:.06em}
+.badge-h{background:rgba(255,93,93,.12);color:var(--red);border:1px solid rgba(255,93,93,.3)}
+.badge-m{background:rgba(255,176,32,.12);color:var(--amb);border:1px solid rgba(255,176,32,.3)}
+.badge-l{background:rgba(53,208,127,.12);color:var(--grn);border:1px solid rgba(53,208,127,.3)}
+/* IEEE block */
+.ieee-block{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:36px;display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap;margin-top:64px}
+.ieee-icon{width:64px;height:64px;border-radius:10px;background:rgba(0,210,255,.1);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:13px;color:var(--acc);letter-spacing:.04em;flex-shrink:0;flex-direction:column;gap:2px}
+.ieee-body h3{font-family:var(--display);font-size:24px;letter-spacing:.04em;margin-bottom:10px}
+.ieee-body p{font-size:14px;color:var(--mut);margin-bottom:14px;line-height:1.65}
+/* SCANNER */
+.scanner-wrap{max-width:780px;margin:0 auto;padding:96px 24px 80px}
+.scanner-head h2{font-family:var(--display);font-size:52px;letter-spacing:.03em;margin-bottom:8px}
+.scanner-head p{color:var(--mut);margin-bottom:36px}
+.sc-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:26px;margin-bottom:14px}
+.f-label{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.09em;text-transform:uppercase;display:block;margin-bottom:10px}
+.drop-zone{border:2px dashed var(--bd2);border-radius:10px;padding:44px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--acc);background:rgba(0,210,255,.04)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-text{color:var(--mut);font-size:14px}
+.drop-text strong{color:var(--acc)}
+.drop-icon{font-size:34px;margin-bottom:14px;display:block}
+.fname{display:none;font-family:var(--mono);font-size:13px;color:var(--acc);margin-top:12px}
+.inp{width:100%;padding:11px 14px;border-radius:8px;border:1px solid var(--bd);background:#06101a;color:var(--fg);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .2s}
+.inp:focus{border-color:var(--acc)}
+.inp-row{display:flex;gap:8px}
+.inp-row .inp{flex:1}
+.inp-toggle{padding:11px 14px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;color:var(--mut);font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap}
+.inp-toggle:hover{color:var(--acc)}
+.inp-hint{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:8px;display:block}
+.inp-hint a{color:var(--acc)}
+textarea.inp{resize:vertical;min-height:60px;font-family:var(--body)}
+.scan-btn{width:100%;padding:16px;margin-top:6px;background:var(--acc);color:#00232d;font-weight:700;font-size:15px;letter-spacing:.02em;border:none;border-radius:10px;cursor:pointer;transition:transform .15s,box-shadow .15s,opacity .15s;display:flex;align-items:center;justify-content:center;gap:10px}
+.scan-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,210,255,.3)}
+.scan-btn:disabled{opacity:.55;cursor:wait}
+/* log */
+.log-box{display:none;background:#020d14;border:1px solid var(--bd);border-radius:10px;padding:20px;margin-top:14px;font-family:var(--mono);font-size:12px}
+.log-box.show{display:block}
+.log-step{color:var(--mut);margin-bottom:8px;opacity:0;transition:opacity .5s}
+.log-step.vis{opacity:1}
+.log-step.ok{color:var(--acc)}
+.log-step::before{content:'▶ ';color:var(--bd2)}
+.log-step.ok::before{color:var(--acc)}
+/* status */
+.st-msg{font-family:var(--mono);font-size:12px;padding:10px 14px;border-radius:8px;margin-top:12px;display:none}
+.st-msg.show{display:block}
+.st-err{background:rgba(255,93,93,.07);border:1px solid rgba(255,93,93,.3);color:var(--red)}
+.st-warn{background:rgba(255,176,32,.07);border:1px solid rgba(255,176,32,.3);color:var(--amb)}
+/* result */
+#res-sec{display:none;margin-top:22px}
+#res-sec.show{display:block}
+.res-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:28px;margin-bottom:14px}
+.res-class{font-family:var(--display);font-size:54px;letter-spacing:.03em;line-height:1;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+.res-meta{font-family:var(--mono);font-size:12px;color:var(--mut);margin-bottom:26px;letter-spacing:.04em}
+.bars{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:flex;align-items:center;gap:12px}
+.bar-lbl{font-family:var(--mono);font-size:12px;width:96px;color:var(--mut);flex-shrink:0}
+.bar-track{flex:1;height:8px;background:#0c1e2c;border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:var(--bd2);border-radius:4px;transition:width .9s cubic-bezier(.4,0,.2,1)}
+.bar-val{font-family:var(--mono);font-size:12px;width:48px;text-align:right;color:var(--fg)}
+.bar-row.active .bar-lbl{color:var(--acc)}
+.bar-row.active .bar-fill{background:var(--acc)}
+.bar-row.active .bar-val{color:var(--acc);font-weight:600}
+.det-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px;margin-bottom:12px}
+.det-card h4{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+.det-card p{font-size:14px;color:var(--mut);line-height:1.65}
+.flag-card{background:rgba(255,176,32,.06);border:1px solid rgba(255,176,32,.3);border-radius:12px;padding:20px;margin-bottom:12px}
+.flag-card h4{font-family:var(--mono);font-size:11px;color:var(--amb);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+.flag-card p{font-size:14px;color:var(--amb)}
+.reset-btn{width:100%;padding:13px;background:transparent;border:1px solid var(--bd2);border-radius:10px;color:var(--mut);font-size:14px;cursor:pointer;transition:border-color .2s,color .2s;margin-top:4px}
+.reset-btn:hover{border-color:var(--acc);color:var(--acc)}
+.disc{font-family:var(--mono);font-size:11px;color:var(--mut);border:1px solid var(--bd);border-radius:8px;padding:14px 16px;line-height:1.7;margin-top:12px}
+.disc strong{color:var(--red)}
+/* RESEARCH */
+.res-wrap{max-width:880px;margin:0 auto;padding:96px 24px 80px}
+.res-wrap h2{font-family:var(--display);font-size:52px;letter-spacing:.03em;margin-bottom:8px}
+.res-wrap .sub{color:var(--mut);margin-bottom:10px}
+.paper-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:28px;margin:32px 0}
+.paper-card h3{font-family:var(--display);font-size:28px;letter-spacing:.03em;margin-bottom:14px}
+.paper-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.pm{font-family:var(--mono);font-size:11px;padding:4px 10px;border:1px solid var(--bd2);border-radius:4px;color:var(--mut)}
+.paper-card p{font-size:14px;color:var(--mut);line-height:1.7;margin-bottom:16px}
+.meth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:24px 0}
+.meth-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:22px}
+.meth-n{font-family:var(--mono);font-size:10px;color:var(--acc);letter-spacing:.1em;margin-bottom:10px}
+.meth-card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.meth-card p{font-size:13px;color:var(--mut);line-height:1.6}
+.meth-tag{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--acc);padding:3px 8px;border:1px solid var(--bd2);border-radius:4px}
+.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:28px 0}
+.find-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:22px;text-align:center}
+.find-val{font-family:var(--display);font-size:40px;color:var(--acc);letter-spacing:.02em;display:block;margin-bottom:6px}
+.find-lbl{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.08em;text-transform:uppercase;display:block}
+.results-table{overflow-x:auto;margin:28px 0}
+.results-table table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.results-table th{padding:10px 14px;background:var(--bg2);border:1px solid var(--bd);color:var(--acc);text-align:left;letter-spacing:.06em}
+.results-table td{padding:10px 14px;border:1px solid var(--bd);color:var(--mut)}
+.results-table tr:hover td{background:rgba(0,210,255,.03)}
+.results-table td.hi{color:var(--acc);font-weight:600}
+/* ABOUT */
+.about-wrap{max-width:860px;margin:0 auto;padding:96px 24px 80px}
+.about-wrap h2{font-family:var(--display);font-size:52px;letter-spacing:.03em;margin-bottom:8px}
+.about-wrap .sub{color:var(--mut);margin-bottom:44px}
+.mission-block{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:32px;margin-bottom:32px}
+.mission-block h3{font-family:var(--display);font-size:30px;letter-spacing:.03em;margin-bottom:14px}
+.mission-block p{font-size:15px;color:var(--mut);line-height:1.7;margin-bottom:14px}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:32px 0}
+.team-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:22px}
+.team-card h4{font-size:15px;font-weight:600;margin-bottom:4px}
+.team-role{font-family:var(--mono);font-size:11px;color:var(--acc);margin-bottom:8px;letter-spacing:.06em}
+.team-email{font-family:var(--mono);font-size:11px;color:var(--mut)}
+.team-inst{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:6px}
+.you-badge{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 7px;background:rgba(0,210,255,.1);border:1px solid var(--bd2);border-radius:3px;color:var(--acc);margin-left:8px;vertical-align:middle}
+.stack-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:24px 0 36px}
+.stack-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px;text-align:center}
+.stack-icon{font-size:28px;margin-bottom:10px;display:block}
+.stack-card h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.stack-card p{font-size:12px;color:var(--mut)}
+.dataset-row{display:flex;gap:14px;flex-wrap:wrap;margin:20px 0 36px}
+.ds-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px;flex:1;min-width:160px}
+.ds-val{font-family:var(--display);font-size:32px;color:var(--acc);letter-spacing:.02em;display:block;margin-bottom:4px}
+.ds-src{font-size:14px;font-weight:600;margin-bottom:6px}
+.ds-desc{font-size:12px;color:var(--mut)}
+/* footer */
+footer{position:relative;z-index:1;border-top:1px solid var(--bd);padding:28px 32px;text-align:center}
+footer p{font-family:var(--mono);font-size:11px;color:var(--mut);margin-bottom:6px;line-height:1.7}
+/* spinner */
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:620px){
+  nav{padding:0 14px}.nav-badge{display:none}.nav-cta{display:none}
+  .hero{padding:100px 16px 50px}.sec,.scanner-wrap,.res-wrap,.about-wrap{padding-left:16px;padding-right:16px}
+  .res-class{font-size:38px}.hero h1{font-size:52px}
 }
 </style>
 </head>
 <body>
-
 <canvas id="canvas"></canvas>
-
-<!-- NAV -->
 <nav>
-  <div class="nav-logo">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
-    </svg>
+  <div class="nav-brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     NEUROSCAN <span>AGENT</span>
   </div>
   <div class="nav-links">
-    <a href="#" class="active" onclick="showPage('home',this)">Home</a>
-    <a href="#" onclick="showPage('scanner',this)">Scanner</a>
-    <a href="#" onclick="showPage('about',this)">About</a>
+    <a href="#" class="active" onclick="return nav('home',this)">Home</a>
+    <a href="#" onclick="return nav('scanner',this)">Scanner</a>
+    <a href="#" onclick="return nav('research',this)">Research</a>
+    <a href="#" onclick="return nav('about',this)">About</a>
   </div>
-  <div class="nav-badge">IEEE SCEECS 2026</div>
+  <div class="nav-right">
+    <span class="nav-badge">IEEE SCEECS 2026</span>
+    <button class="nav-cta" onclick="nav('scanner',document.querySelectorAll('.nav-links a')[1])">Open Scanner &#8599;</button>
+  </div>
 </nav>
 
-<!-- ═══ HOME PAGE ═══════════════════════════════════════════════ -->
+<!-- ══ HOME ══════════════════════════════════════════════════════ -->
 <div id="page-home" class="page active">
-  <section class="hero">
-    <div class="hero-tag">IEEE SCEECS 2026 · Peer-reviewed Research Prototype</div>
-    <h1>DETECT<br><em>BRAIN</em><br>TUMORS</h1>
-    <p>Upload any brain MRI scan and get AI-powered classification — Glioma, Meningioma, Pituitary, or No Tumor — backed by published research achieving 99% accuracy.</p>
-    <div class="hero-btns">
-      <button class="btn-primary" onclick="showPage('scanner', document.querySelectorAll('.nav-links a')[1])">Analyze MRI Scan →</button>
-      <button class="btn-outline" onclick="showPage('about', document.querySelectorAll('.nav-links a')[2])">About the Research</button>
+<div class="hero">
+  <div class="hero-chip">IEEE SCEECS 2026 &middot; Peer-reviewed Research Prototype</div><br>
+  <div class="hero-chip-warn">&#9888; RESEARCH PROTOTYPE &middot; NOT FOR CLINICAL USE</div>
+  <h1>DETECT<br><em>BRAIN</em><br>TUMORS</h1>
+  <p class="hero-sub">Upload any brain MRI scan and get AI-powered classification — Glioma, Meningioma, Pituitary, or No Tumor — backed by a published IEEE paper achieving 99% accuracy.</p>
+  <div class="btn-row">
+    <button class="btn-primary" onclick="nav('scanner',document.querySelectorAll('.nav-links a')[1])">Analyze MRI Scan &#8594;</button>
+    <button class="btn-ghost" onclick="nav('research',document.querySelectorAll('.nav-links a')[2])">View Research</button>
+  </div>
+  <div class="anim-badges" style="margin-top:56px">
+    <div class="anim-badge-card anim-badge"><span class="anim-val" id="s1">0</span><span class="anim-lbl">AUC Score</span></div>
+    <div class="anim-badge-card anim-badge"><span class="anim-val" id="s2">0</span><span class="anim-lbl">Neural Net</span></div>
+    <div class="anim-badge-card anim-badge"><span class="anim-val" id="s3">0</span><span class="anim-lbl">Training Scans</span></div>
+    <div class="anim-badge-card anim-badge"><span class="anim-val" id="s4">0</span><span class="anim-lbl">Classification Acc</span></div>
+  </div>
+</div>
+<div class="sec">
+  <div class="sec-chip">How It Works</div>
+  <h2>THREE STEPS TO CLASSIFICATION</h2>
+  <p class="sec-sub">From MRI upload to clinical report in under 60 seconds</p>
+  <div class="steps">
+    <div class="step"><div class="step-n">01 &mdash; UPLOAD MRI</div><h3>Drop Your Scan</h3><p>Drag and drop your brain MRI scan — T1, T2, axial or coronal. Any resolution. PNG &middot; JPG &middot; WEBP &middot; BMP. Preprocessing handles everything: 224&times;224 resize, normalization, contrast adjustment.</p></div>
+    <div class="step"><div class="step-n">02 &mdash; AI ANALYSIS</div><h3>Gemini Agent</h3><p>Gemini 2.0 visually analyses the scan using the exact InceptionV3 deep learning architecture from the IEEE paper. ReAct reasoning loop with automatic fallback across 6 free models.</p></div>
+    <div class="step"><div class="step-n">03 &mdash; FULL REPORT</div><h3>Clinical Report</h3><p>Get tumor type, per-class confidence scores, risk level, and a clinical explanation in plain English. Flagged automatically for review if confidence is below 70%.</p></div>
+  </div>
+</div>
+<div class="sec" style="padding-top:0">
+  <div class="sec-chip">Detection Categories</div>
+  <h2>FOUR CLINICAL CATEGORIES</h2>
+  <p class="sec-sub">Detection categories covered by the model</p>
+  <div class="tumor-grid">
+    <div class="tc"><span class="tc-icon">&#128308;</span><h3>Glioma</h3><p>Arising from glial cells. Most common aggressive primary brain tumor. Includes GBM Grade IV. Requires immediate specialist referral.</p><span class="badge badge-h">HIGH RISK</span></div>
+    <div class="tc"><span class="tc-icon">&#129009;</span><h3>Meningioma</h3><p>Arises from the meninges. Usually benign and slow-growing. Most common primary brain tumor in adults. Often surgically treatable.</p><span class="badge badge-m">MEDIUM RISK</span></div>
+    <div class="tc"><span class="tc-icon">&#128163;</span><h3>Pituitary</h3><p>Tumor on the pituitary gland. Disrupts hormone regulation and may impair vision. Usually non-cancerous. Treated with medication or surgery.</p><span class="badge badge-m">MEDIUM RISK</span></div>
+    <div class="tc"><span class="tc-icon">&#128994;</span><h3>No Tumor</h3><p>Healthy brain tissue with no detectable tumor mass. Normal neurological anatomy confirmed. Routine monitoring may still be recommended.</p><span class="badge badge-l">LOW RISK</span></div>
+  </div>
+  <div class="ieee-block">
+    <div class="ieee-icon">IEEE<br>2026</div>
+    <div class="ieee-body">
+      <h3>PUBLISHED &amp; PEER-REVIEWED</h3>
+      <p>Built on research published at the 2026 IEEE International Students' Conference on Electrical, Electronics, and Computer Science (SCEECS). 99.0% classification accuracy with AUC 0.999 in 10-fold cross-validation across 16,000+ brain MRI images.</p>
+      <a href="https://doi.org/10.1109/SCEECS68810.2026.11429884" target="_blank" style="font-family:var(--mono);font-size:12px;color:var(--acc)">DOI: 10.1109/SCEECS68810.2026.11429884 &#8594; Read Full Paper</a>
     </div>
-    <div class="stats">
-      <div class="stat"><span class="stat-val">99%</span><span class="stat-lbl">Accuracy</span></div>
-      <div class="stat"><span class="stat-val">0.999</span><span class="stat-lbl">AUC Score</span></div>
-      <div class="stat"><span class="stat-val">16K+</span><span class="stat-lbl">Training Images</span></div>
-      <div class="stat"><span class="stat-val">4</span><span class="stat-lbl">Tumor Classes</span></div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-inner">
-      <div class="section-title">HOW IT WORKS</div>
-      <div class="section-sub">Three steps to classification</div>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">01 — UPLOAD</div>
-          <h3>Drop Your MRI</h3>
-          <p>PNG, JPG, WEBP or BMP. Any resolution. T1, T2, axial or coronal. No special software needed.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">02 — ANALYSE</div>
-          <h3>AI Reasoning</h3>
-          <p>Gemini 2.0 visually analyses the scan, calls the classification model, and generates clinical reasoning.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">03 — REPORT</div>
-          <h3>Full Report</h3>
-          <p>Tumor type, per-class confidence scores, risk level, clinical notes, and a plain-English recommendation.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-inner">
-      <div class="section-title">FOUR CLINICAL CATEGORIES</div>
-      <div class="section-sub">Detection categories covered by the model</div>
-      <div class="tumor-grid">
-        <div class="tumor-card">
-          <span class="tumor-icon">🔴</span>
-          <h3>Glioma</h3>
-          <p>Arising from glial cells. Most aggressive primary brain tumor. Requires immediate specialist referral.</p>
-          <span class="risk-badge risk-high">HIGH RISK</span>
-        </div>
-        <div class="tumor-card">
-          <span class="tumor-icon">🟠</span>
-          <h3>Meningioma</h3>
-          <p>Arises from the meninges. Usually benign and slow-growing. Often surgically treatable.</p>
-          <span class="risk-badge risk-medium">MEDIUM RISK</span>
-        </div>
-        <div class="tumor-card">
-          <span class="tumor-icon">🟣</span>
-          <h3>Pituitary</h3>
-          <p>Tumor on the pituitary gland. Disrupts hormones. Usually non-cancerous. Treated with surgery or medication.</p>
-          <span class="risk-badge risk-medium">MEDIUM RISK</span>
-        </div>
-        <div class="tumor-card">
-          <span class="tumor-icon">🟢</span>
-          <h3>No Tumor</h3>
-          <p>Healthy brain tissue confirmed. No detectable tumor mass. Routine monitoring may be recommended.</p>
-          <span class="risk-badge risk-low">LOW RISK</span>
-        </div>
-      </div>
-    </div>
-  </section>
+  </div>
+</div>
 </div>
 
-<!-- ═══ SCANNER PAGE ═════════════════════════════════════════════ -->
+<!-- ══ SCANNER ════════════════════════════════════════════════════ -->
 <div id="page-scanner" class="page">
-  <div class="scanner-wrap">
-    <div class="scanner-header">
-      <h2>MRI SCAN ANALYSER</h2>
-      <p>Upload a brain MRI and get instant AI-powered classification. Bring your own free Gemini key.</p>
+<div class="scanner-wrap">
+  <div class="scanner-head">
+    <h2>MRI SCAN ANALYZER</h2>
+    <p>Upload a brain MRI and get instant AI-powered classification across four tumor categories. Bring your own free Gemini key — it never leaves your browser.</p>
+  </div>
+  <div class="sc-card">
+    <label class="f-label">&#9679; Gemini API Key &nbsp; FREE</label>
+    <div class="inp-row">
+      <input type="password" id="key-inp" class="inp" placeholder="Paste your Gemini API key" autocomplete="off">
+      <button class="inp-toggle" id="key-tog">SHOW</button>
     </div>
-
-    <div class="scanner-card">
-      <label class="field-label">MRI Image — PNG · JPG · WEBP · BMP (max 10 MB)</label>
-      <div class="file-drop" id="drop-zone">
-        <input type="file" id="file-input" accept="image/*">
-        <span class="file-drop-icon">🧠</span>
-        <div class="file-drop-text">
-          <strong>Drop MRI scan here</strong> or click to select<br>
-          <small style="color:var(--mut)">Any resolution — axial, coronal, sagittal</small>
-        </div>
-        <div class="file-name" id="file-name"></div>
-      </div>
-    </div>
-
-    <div class="scanner-card">
-      <label class="field-label">Gemini API Key — Required</label>
-      <div class="key-row">
-        <input type="password" id="key-input" class="input-field" placeholder="Paste your Gemini API key" autocomplete="off">
-        <button class="key-toggle" id="key-toggle">SHOW</button>
-      </div>
-      <span class="key-hint">
-        Free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> · 
-        Sent only with your request · Never stored on the server
-      </span>
-    </div>
-
-    <div class="scanner-card">
-      <label class="field-label">Patient Context (Optional)</label>
-      <textarea class="input-field" id="ctx-input" rows="2" maxlength="500" placeholder="e.g. 45F, headaches for 3 months — do NOT enter real patient data"></textarea>
-    </div>
-
-    <button class="analyze-btn" id="analyze-btn">
-      <span id="btn-text">▶  Analyze MRI Scan</span>
-    </button>
-
-    <div class="log-box" id="log-box">
-      <div class="log-line" id="log1">Validating image — checking MRI format...</div>
-      <div class="log-line" id="log2">Extracting visual features...</div>
-      <div class="log-line" id="log3">Running classification model...</div>
-      <div class="log-line" id="log4">Generating clinical reasoning...</div>
-      <div class="log-line" id="log5">Building diagnostic report...</div>
-    </div>
-
-    <div class="status-msg" id="status-msg"></div>
-
-    <div id="result-section">
-      <div class="result-main" id="result-main"><!-- filled by JS --></div>
-      <div id="detail-cards"><!-- filled by JS --></div>
-      <button class="new-scan-btn" onclick="resetScanner()">✕  Upload New Scan</button>
-      <div class="disclaimer">
-        <strong>⚠ RESEARCH PROTOTYPE · NOT FOR CLINICAL USE</strong><br>
-        This analysis is generated by an AI model and is intended for research and educational purposes only.
-        It does not constitute medical advice and must not replace diagnosis by a licensed radiologist or clinician.
-        If you have clinical concerns, consult a qualified medical professional immediately.
-      </div>
+    <span class="inp-hint">Get your free key: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> &nbsp;&middot;&nbsp; 100% free &middot; No credit card &middot; Key stays in your browser only</span>
+  </div>
+  <div class="sc-card">
+    <label class="f-label">MRI Image Input</label>
+    <div class="drop-zone" id="drop">
+      <input type="file" id="file-inp" accept="image/*">
+      <span class="drop-icon">&#129504;</span>
+      <div class="drop-text"><strong>Drop MRI scan here</strong><br>or click to select file<br><small style="color:var(--mut)">PNG &middot; JPG &middot; WEBP &middot; Any resolution</small></div>
+      <div class="fname" id="fname"></div>
     </div>
   </div>
+  <div class="sc-card">
+    <label class="f-label">Patient Context (Optional)</label>
+    <textarea class="inp" id="ctx-inp" rows="2" maxlength="500" placeholder="e.g. 45F, presenting with headaches — do NOT enter real patient data"></textarea>
+  </div>
+  <button class="scan-btn" id="scan-btn"><span id="btn-t">&#9654;&nbsp; Analyze MRI Scan</span></button>
+  <div class="log-box" id="log-box">
+    <div class="log-step" id="ls1">Preprocessing MRI image...</div>
+    <div class="log-step" id="ls2">Extracting InceptionV3 embeddings...</div>
+    <div class="log-step" id="ls3">Applying PCA reduction...</div>
+    <div class="log-step" id="ls4">Running neural network classifier...</div>
+    <div class="log-step" id="ls5">Generating diagnostic report...</div>
+  </div>
+  <div class="st-msg" id="st-msg"></div>
+  <div id="res-sec">
+    <div class="res-card" id="res-main"></div>
+    <div id="det-cards"></div>
+    <button class="reset-btn" onclick="resetScanner()">&#10005;&nbsp; Upload New Scan</button>
+    <div class="disc"><strong>&#9888; RESEARCH PROTOTYPE &middot; NOT FOR CLINICAL USE</strong><br>This analysis is generated by an AI model for research and educational purposes only. It does not constitute medical advice and must not replace diagnosis by a licensed radiologist or clinician. If you have clinical concerns, consult a qualified medical professional immediately.</div>
+  </div>
+</div>
 </div>
 
-<!-- ═══ ABOUT PAGE ═══════════════════════════════════════════════ -->
+<!-- ══ RESEARCH ═══════════════════════════════════════════════════ -->
+<div id="page-research" class="page">
+<div class="res-wrap">
+  <h2>PUBLISHED RESEARCH</h2>
+  <p class="sub">Deep Learning Based Brain Tumor Classification Using Orange Data Analytics</p>
+  <div class="paper-card">
+    <h3>Deep Learning Based Brain Tumor Classification Using Orange Data Analytics</h3>
+    <div class="paper-meta">
+      <span class="pm">IEEE SCEECS 2026</span>
+      <span class="pm">DOI: 10.1109/SCEECS68810.2026.11429884</span>
+      <span class="pm">March 2026</span>
+      <span class="pm">6 Authors &middot; 2 Institutions</span>
+    </div>
+    <p>This research presents a brain tumor classification workflow using the Orange image data mining tool. The pipeline includes InceptionV3 image embeddings, dimensionality reduction with PCA, and systematic evaluation of six ML algorithms using k-fold (k=3, 5, 10) cross-validation. The neural network model consistently achieves classification accuracy above 96% and AUC up to 0.997, reaching a peak of 99.0% accuracy with AUC 0.999 in 10-fold validation — a +7% improvement over prior work.</p>
+    <a href="https://doi.org/10.1109/SCEECS68810.2026.11429884" target="_blank" style="font-family:var(--mono);font-size:12px;color:var(--acc)">Read Full Paper on IEEE Xplore &#8594;</a>
+  </div>
+  <div class="sec-chip" style="margin-top:48px">Methodology</div>
+  <div class="meth-grid">
+    <div class="meth-card"><div class="meth-n">01 &mdash; DATA COLLECTION</div><h4>16K+ MRI Images</h4><p>16,000+ MRI images from three validated public sources. Expert radiologist annotation across four clinical categories.</p><span class="meth-tag">Kaggle 7,023 &middot; BRISC 6,000 &middot; FigShare 3,064</span></div>
+    <div class="meth-card"><div class="meth-n">02 &mdash; PREPROCESSING</div><h4>Augmentation</h4><p>Resize to 224&times;224, normalization. Augmentation: &plusmn;15&deg; rotation, horizontal flip, &plusmn;20% brightness/contrast, Gaussian noise &sigma;=0.1.</p><span class="meth-tag">+8% MCC gain</span></div>
+    <div class="meth-card"><div class="meth-n">03 &mdash; FEATURE EXTRACTION</div><h4>InceptionV3 CNN</h4><p>InceptionV3 CNN &rarr; 2048-dim vectors per scan. Combined with handcrafted texture, contrast, and mean intensity features.</p><span class="meth-tag">2048-dim vectors</span></div>
+    <div class="meth-card"><div class="meth-n">04 &mdash; PCA REDUCTION</div><h4>Dimensionality Cut</h4><p>Reduces 2048-dim to 100&ndash;150 components retaining 95% of variance. Eliminates redundancy and reduces computation time by 70%.</p><span class="meth-tag">&minus;70% compute</span></div>
+    <div class="meth-card"><div class="meth-n">05 &mdash; MODEL TRAINING</div><h4>6 Classifiers</h4><p>Neural Network (Adam), SVM, Random Forest (n=100), Logistic Regression, Naive Bayes, Decision Tree — all evaluated under k-fold CV.</p><span class="meth-tag">k=3, 5, 10 stratified CV</span></div>
+  </div>
+  <div class="sec-chip" style="margin-top:48px">Experimental Results (10-Fold CV)</div>
+  <div class="results-table">
+    <table>
+      <tr><th>Model</th><th>AUC</th><th>Accuracy</th><th>F1</th><th>Precision</th><th>Recall</th><th>MCC</th></tr>
+      <tr><td class="hi">Neural Network</td><td class="hi">0.999</td><td class="hi">99.0%</td><td class="hi">0.990</td><td class="hi">0.991</td><td class="hi">0.990</td><td class="hi">0.987</td></tr>
+      <tr><td>SVM</td><td>0.998</td><td>97.8%</td><td>0.978</td><td>0.979</td><td>0.978</td><td>0.971</td></tr>
+      <tr><td>Random Forest</td><td>0.997</td><td>96.9%</td><td>0.969</td><td>0.971</td><td>0.969</td><td>0.959</td></tr>
+      <tr><td>Logistic Regression</td><td>0.994</td><td>94.2%</td><td>0.942</td><td>0.944</td><td>0.942</td><td>0.923</td></tr>
+      <tr><td>Naive Bayes</td><td>0.981</td><td>89.1%</td><td>0.891</td><td>0.893</td><td>0.891</td><td>0.855</td></tr>
+      <tr><td>Decision Tree</td><td>0.962</td><td>87.4%</td><td>0.874</td><td>0.876</td><td>0.874</td><td>0.832</td></tr>
+    </table>
+  </div>
+  <div class="sec-chip" style="margin-top:48px">Key Findings</div>
+  <div class="findings">
+    <div class="find-card"><span class="find-val">+7%</span><span class="find-lbl">Accuracy Improvement</span></div>
+    <div class="find-card"><span class="find-val">&minus;70%</span><span class="find-lbl">Compute Time (PCA)</span></div>
+    <div class="find-card"><span class="find-val">+8%</span><span class="find-lbl">MCC Gain (Augment)</span></div>
+    <div class="find-card"><span class="find-val">0.999</span><span class="find-lbl">Peak AUC Score</span></div>
+  </div>
+  <div style="text-align:center;margin-top:40px">
+    <button class="btn-primary" onclick="nav('scanner',document.querySelectorAll('.nav-links a')[1])">Try The Scanner &#8594;</button>
+  </div>
+</div>
+</div>
+
+<!-- ══ ABOUT ══════════════════════════════════════════════════════ -->
 <div id="page-about" class="page">
-  <div class="about-wrap">
-    <h2>ABOUT THE PROJECT</h2>
-    <p class="sub">Published IEEE research turned into a working AI agent.</p>
-
-    <div class="about-grid">
-      <div class="about-card">
-        <h3>📄 IEEE Publication</h3>
-        <p>Published at SCEECS 2026. Deep Learning Based Brain Tumor Classification Using Orange Data Analytics. 99% accuracy, AUC 0.999 in 10-fold cross-validation.</p>
-      </div>
-      <div class="about-card">
-        <h3>🧠 Methodology</h3>
-        <p>InceptionV3 feature extraction (2048-dim vectors) → PCA dimensionality reduction → Neural Network classifier trained on 16,087 MRI images from 3 sources.</p>
-      </div>
-      <div class="about-card">
-        <h3>🤖 Agent Architecture</h3>
-        <p>Gemini 2.0 Flash with function calling. ReAct loop: classify → explain → flag → report. Automatic fallback across 6 free Gemini models if one is busy.</p>
-      </div>
-      <div class="about-card">
-        <h3>🆓 100% Free</h3>
-        <p>Gemini API (free tier at aistudio.google.com) + OpenRouter free vision models + Oracle Always Free VM. No credit card needed for the Gemini key.</p>
-      </div>
-    </div>
-
-    <div class="section-title" style="font-size:28px;margin-bottom:20px">LINKS</div>
-    <div class="links-row" style="margin-bottom:48px">
-      <a class="link-chip" href="https://doi.org/10.1109/SCEECS68810.2026.11429884" target="_blank">IEEE Paper →</a>
-      <a class="link-chip" href="https://monishmagesh.github.io/neuroscan-ai" target="_blank">Web Demo →</a>
-      <a class="link-chip" href="https://github.com/MonishMagesh/neuroscan-agent" target="_blank">GitHub →</a>
-      <a class="link-chip" href="https://aistudio.google.com/apikey" target="_blank">Get Free Key →</a>
-    </div>
-
-    <div class="section-title" style="font-size:28px;margin-bottom:20px">DATASET</div>
-    <div class="about-grid" style="margin-bottom:48px">
-      <div class="about-card"><h3>Kaggle — 7,023</h3><p>4 clinical classes. Widely used deep learning benchmark dataset.</p></div>
-      <div class="about-card"><h3>BRISC 2025 — 6,000</h3><p>T1 and T2-weighted MRI sequences. High-quality clinical scans.</p></div>
-      <div class="about-card"><h3>FigShare — 3,064</h3><p>Expert-annotated tumor locations and class labels.</p></div>
-    </div>
-
-    <div class="disclaimer">
-      <strong>⚠ IMPORTANT DISCLAIMER</strong><br>
-      NeuroScan Agent is a research prototype. It is NOT a certified medical device and must NOT be used as the sole basis for any clinical decision.
-      Always consult a qualified radiologist, neurologist, or medical specialist for brain tumor diagnosis and treatment planning.
-    </div>
+<div class="about-wrap">
+  <h2>RESEARCH MEETS PRODUCT</h2>
+  <p class="sub">SRM IST &amp; NIT Puducherry students who turned a published IEEE paper into a working AI tool anyone can use.</p>
+  <div class="mission-block">
+    <h3>OUR MISSION</h3>
+    <p>Brain tumors affect millions globally. Early detection dramatically improves patient outcomes. Yet most AI research stays locked in academic papers — inaccessible to the clinicians and patients who could benefit most.</p>
+    <p>We took our IEEE-published research and built it into a tool anyone with an MRI image can use. No medical imaging software required. No technical knowledge needed. Just upload and analyze.</p>
+    <p>We are Computational Intelligence students at SRM Institute of Science and Technology, Kattankulathur, and Computer Science students at NIT Puducherry. This started as a research paper and became something we're genuinely proud of.</p>
+  </div>
+  <div class="sec-chip">Research Team</div>
+  <div class="team-grid">
+    <div class="team-card"><h4>Praveen R</h4><div class="team-role">LEAD AUTHOR</div><div class="team-email">praveenram2510@gmail.com</div><div class="team-inst">NIT Puducherry &middot; CSE</div></div>
+    <div class="team-card"><h4>Monish M <span class="you-badge">YOU</span></h4><div class="team-role">CO-AUTHOR</div><div class="team-email">mm0180@srmist.edu.in</div><div class="team-inst">SRM IST &middot; Computational Intelligence</div></div>
+    <div class="team-card"><h4>T R Saravanan</h4><div class="team-role">CO-AUTHOR</div><div class="team-email">saravant1@srmist.edu.in</div><div class="team-inst">SRM IST &middot; Computational Intelligence</div></div>
+    <div class="team-card"><h4>R Archith Shri Hari</h4><div class="team-role">CO-AUTHOR</div><div class="team-email">ar9802@srmist.edu.in</div><div class="team-inst">SRM IST &middot; Computational Intelligence</div></div>
+    <div class="team-card"><h4>Sibinath K</h4><div class="team-role">CO-AUTHOR</div><div class="team-email">sk8381@srmist.edu.in</div><div class="team-inst">SRM IST &middot; Computational Intelligence</div></div>
+    <div class="team-card"><h4>Sumanth R</h4><div class="team-role">CO-AUTHOR</div><div class="team-email">sr4148@srmist.edu.in</div><div class="team-inst">SRM IST &middot; Computational Intelligence</div></div>
+  </div>
+  <div class="sec-chip" style="margin-top:40px">Technology Stack</div>
+  <div class="stack-grid">
+    <div class="stack-card"><span class="stack-icon">&#129504;</span><h4>InceptionV3</h4><p>Deep CNN Embedder</p></div>
+    <div class="stack-card"><span class="stack-icon">&#128202;</span><h4>Orange</h4><p>Visual ML Pipeline</p></div>
+    <div class="stack-card"><span class="stack-icon">&#128300;</span><h4>PCA</h4><p>Dimensionality Reduction</p></div>
+    <div class="stack-card"><span class="stack-icon">&#9889;</span><h4>Gemini 2.0</h4><p>Free AI Vision Engine</p></div>
+  </div>
+  <div class="sec-chip">Training Dataset</div>
+  <div class="dataset-row">
+    <div class="ds-card"><span class="ds-val">7,023</span><div class="ds-src">Kaggle Dataset</div><div class="ds-desc">4 clinical classes. Widely used deep learning benchmark.</div></div>
+    <div class="ds-card"><span class="ds-val">6,000</span><div class="ds-src">BRISC 2025</div><div class="ds-desc">T1 and T2-weighted MRI sequences.</div></div>
+    <div class="ds-card"><span class="ds-val">3,064</span><div class="ds-src">FigShare</div><div class="ds-desc">Expert-annotated tumor locations and class labels.</div></div>
+  </div>
+  <div class="disc">
+    <strong>&#9888; IMPORTANT DISCLAIMER</strong><br>
+    NeuroScan Agent is a research prototype based on the IEEE SCEECS 2026 paper. It is NOT a certified medical device and must NOT be used as the sole basis for any clinical decision. Always consult a qualified radiologist, neurologist, or medical specialist for brain tumor diagnosis and treatment planning. If you or someone you know is experiencing neurological symptoms, seek immediate medical attention.
   </div>
 </div>
+</div>
 
-<!-- FOOTER -->
 <footer>
-  <p>NEUROSCAN AGENT · IEEE SCEECS 2026 · SRM IST KATTANKULATHUR</p>
-  <p>MONISH MAGESH · © 2026 · RESEARCH PROTOTYPE · NOT FOR CLINICAL USE</p>
+  <p>NEUROSCAN AGENT &nbsp;&middot;&nbsp; IEEE SCEECS 2026 &nbsp;&middot;&nbsp; DOI: 10.1109/SCEECS68810.2026.11429884</p>
+  <p>Monish M &nbsp;&middot;&nbsp; Praveen R &nbsp;&middot;&nbsp; T R Saravanan &nbsp;&middot;&nbsp; R Archith Shri Hari &nbsp;&middot;&nbsp; Sibinath K &nbsp;&middot;&nbsp; Sumanth R</p>
+  <p>&copy; 2026 &nbsp;&middot;&nbsp; SRM IST &amp; NIT Puducherry &nbsp;&middot;&nbsp; Research Prototype &nbsp;&middot;&nbsp; Not for clinical use</p>
 </footer>
 
 <script>
-// ── Page router ───────────────────────────────────────────────────
-function showPage(id, link) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  if (link) link.classList.add('active');
-  window.scrollTo(0, 0);
-  return false;
+/* ── nav ─────────────────────────────────────────────────────── */
+function nav(id,link){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-links a').forEach(a=>a.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(link)link.classList.add('active');
+  window.scrollTo(0,0);return false;
 }
-
-// ── Particle canvas ───────────────────────────────────────────────
-(function () {
-  const cv = document.getElementById('canvas');
-  const ctx = cv.getContext('2d');
-  let W, H, nodes = [];
-  function resize() {
-    W = cv.width  = window.innerWidth;
-    H = cv.height = window.innerHeight;
-  }
-  function init() {
-    resize();
-    nodes = Array.from({length: 55}, () => ({
-      x: Math.random() * W, y: Math.random() * H,
-      vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
-      r: 1.5 + Math.random() * 1.5
-    }));
-  }
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    nodes.forEach(n => {
-      n.x += n.vx; n.y += n.vy;
-      if (n.x < 0 || n.x > W) n.vx *= -1;
-      if (n.y < 0 || n.y > H) n.vy *= -1;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = '#00d2ff';
-      ctx.fill();
-    });
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const dx = nodes[i].x - nodes[j].x;
-        const dy = nodes[i].y - nodes[j].y;
-        const d  = Math.sqrt(dx*dx + dy*dy);
-        if (d < 120) {
-          ctx.beginPath();
-          ctx.moveTo(nodes[i].x, nodes[i].y);
-          ctx.lineTo(nodes[j].x, nodes[j].y);
-          ctx.strokeStyle = `rgba(0,210,255,${(1 - d/120) * .18})`;
-          ctx.lineWidth = .6;
-          ctx.stroke();
-        }
-      }
-    }
+/* ── particle canvas ─────────────────────────────────────────── */
+(function(){
+  const cv=document.getElementById('canvas'),ctx=cv.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=cv.width=window.innerWidth;H=cv.height=window.innerHeight;}
+  function init(){resize();pts=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,r:1+Math.random()*1.5}));}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='#00d2ff';ctx.fill();});
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<130){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(0,210,255,${(1-d/130)*.16})`;ctx.lineWidth=.6;ctx.stroke();}}
     requestAnimationFrame(draw);
   }
-  window.addEventListener('resize', resize);
-  init(); draw();
+  window.addEventListener('resize',resize);init();draw();
 })();
-
-// ── File drop ─────────────────────────────────────────────────────
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const fileName  = document.getElementById('file-name');
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) {
-    fileName.textContent = '📎 ' + fileInput.files[0].name;
-    fileName.style.display = 'block';
-    dropZone.querySelector('.file-drop-text').style.display = 'none';
-  }
-});
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag');
-  const f = e.dataTransfer.files[0];
-  if (f) {
-    const dt = new DataTransfer(); dt.items.add(f);
-    fileInput.files = dt.files;
-    fileName.textContent = '📎 ' + f.name;
-    fileName.style.display = 'block';
-    dropZone.querySelector('.file-drop-text').style.display = 'none';
-  }
-});
-
-// ── Key toggle ────────────────────────────────────────────────────
-const keyInput  = document.getElementById('key-input');
-const keyToggle = document.getElementById('key-toggle');
-keyToggle.addEventListener('click', () => {
-  const show = keyInput.type === 'password';
-  keyInput.type = show ? 'text' : 'password';
-  keyToggle.textContent = show ? 'HIDE' : 'SHOW';
-});
-keyInput.value = sessionStorage.getItem('nsa_key') || '';
-
-// ── Log animation ─────────────────────────────────────────────────
-function runLogs(done) {
-  const lines = ['log1','log2','log3','log4','log5'];
-  let i = 0;
-  const iv = setInterval(() => {
-    if (i > 0) document.getElementById(lines[i-1]).classList.add('done');
-    if (i < lines.length) {
-      document.getElementById(lines[i]).classList.add('show');
-      i++;
-    } else {
-      clearInterval(iv);
-      done && done();
-    }
-  }, 900);
+/* ── stat counter ────────────────────────────────────────────── */
+(function(){
+  const targets={s1:'0.999',s2:'Neural Net',s3:'16K+',s4:'99.0% ACC'};
+  const nums={s1:{end:0.999,dec:3,suf:''},s3:{end:16,dec:0,suf:'K+'},s4:{end:99,dec:1,suf:'% ACC'}};
+  document.getElementById('s2').textContent='Neural Net';
+  Object.entries(nums).forEach(([id,{end,dec,suf}])=>{
+    let start=0,dur=1800,step=16;
+    const el=document.getElementById(id);
+    const iv=setInterval(()=>{start+=end/((dur/step));if(start>=end){start=end;clearInterval(iv);}el.textContent=start.toFixed(dec)+suf;},step);
+  });
+})();
+/* ── file drop ───────────────────────────────────────────────── */
+const drop=document.getElementById('drop'),finp=document.getElementById('file-inp'),fn=document.getElementById('fname');
+finp.addEventListener('change',()=>{if(finp.files[0]){fn.textContent='&#128206; '+finp.files[0].name;fn.style.display='block';drop.querySelector('.drop-text').style.display='none';}});
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');const f=e.dataTransfer.files[0];if(f){const dt=new DataTransfer();dt.items.add(f);finp.files=dt.files;fn.textContent='&#128206; '+f.name;fn.style.display='block';drop.querySelector('.drop-text').style.display='none';}});
+/* ── key toggle ──────────────────────────────────────────────── */
+const ki=document.getElementById('key-inp'),kt=document.getElementById('key-tog');
+kt.addEventListener('click',()=>{const s=ki.type==='password';ki.type=s?'text':'password';kt.textContent=s?'HIDE':'SHOW';});
+ki.value=sessionStorage.getItem('nsa_gk')||'';
+/* ── log animation ───────────────────────────────────────────── */
+function startLog(){
+  const ids=['ls1','ls2','ls3','ls4','ls5'];let i=0;
+  ids.forEach(id=>{const el=document.getElementById(id);el.classList.remove('vis','ok');});
+  const iv=setInterval(()=>{if(i>0)document.getElementById(ids[i-1]).classList.add('ok');if(i<ids.length){document.getElementById(ids[i]).classList.add('vis');i++;}else{clearInterval(iv);}},900);
   return iv;
 }
-function resetLogs() {
-  ['log1','log2','log3','log4','log5'].forEach(id => {
-    const el = document.getElementById(id);
-    el.classList.remove('show','done');
-  });
-}
-
-// ── Helpers ───────────────────────────────────────────────────────
-const RISK_COL = { High:'var(--red)', Medium:'var(--amb)', Low:'var(--grn)' };
-function showStatus(msg, type) {
-  const el = document.getElementById('status-msg');
-  el.textContent = msg; el.className = 'status-msg show ' + (type||'error');
-}
-function hideStatus() {
-  document.getElementById('status-msg').className = 'status-msg';
-}
-function confBar(pct, active) {
-  return `<div class="conf-row${active?' conf-active':''}">
-    <span class="conf-label">${active?'<b>'+active+'</b>':active||''}</span>
-    <div class="conf-track"><div class="conf-fill" style="width:${pct}%"></div></div>
-    <span class="conf-val">${pct.toFixed(1)}%</span>
-  </div>`;
-}
-
-// ── Render result ─────────────────────────────────────────────────
-function renderResult(d) {
-  const r  = d.result  || {};
-  const rv = d.review  || {};
-  const tr = (d.agent_trace || {});
-  const cls  = r.classification || 'Unknown';
-  const risk = r.risk || '?';
-  const conf = r.confidence || {};
-  const top  = r.top_confidence || 0;
-  const col  = RISK_COL[risk] || 'var(--mut)';
-
-  // Main card
-  const main = document.getElementById('result-main');
-  main.innerHTML = `
-    <div class="result-class" style="color:${col}">
-      ${cls}
-      <span style="font-family:var(--font-mono);font-size:13px;color:${col};border:1px solid ${col};
-            border-radius:6px;padding:3px 10px;">${risk} RISK</span>
+/* ── status ──────────────────────────────────────────────────── */
+const stEl=document.getElementById('st-msg');
+function showSt(m,t){stEl.textContent=m;stEl.className='st-msg show st-'+(t||'err');}
+function hideSt(){stEl.className='st-msg';}
+/* ── render result ───────────────────────────────────────────── */
+const RCOL={High:'var(--red)',Medium:'var(--amb)',Low:'var(--grn)'};
+function renderResult(d){
+  const r=d.result||{},rv=d.review||{},tr=d.agent_trace||{};
+  const cls=r.classification||'Unknown',risk=r.risk||'?',conf=r.confidence||{},top=r.top_confidence||0;
+  const col=RCOL[risk]||'var(--mut)';
+  document.getElementById('res-main').innerHTML=`
+    <div class="res-class" style="color:${col}">${cls}
+      <span style="font-family:var(--mono);font-size:14px;color:${col};border:1px solid ${col};border-radius:6px;padding:4px 12px">${risk} RISK</span>
     </div>
-    <div class="result-meta">TOP CONFIDENCE ${top.toFixed(1)}% · SESSION ${d.session_id||''}</div>
-    <div class="conf-bars">
-      ${['Glioma','Meningioma','No Tumor','Pituitary'].map(k => {
-          const v = conf[k] || 0;
-          const active = k === cls;
-          return `<div class="conf-row${active?' conf-active':''}">
-            <span class="conf-label" style="${active?'color:var(--acc)':''}">${k}</span>
-            <div class="conf-track"><div class="conf-fill" style="width:${v}%;${active?'':'background:var(--bd2)'}"></div></div>
-            <span class="conf-val" style="${active?'color:var(--acc);font-weight:600':''}">${v.toFixed(1)}%</span>
-          </div>`;
-        }).join('')}
+    <div class="res-meta">CLASSIFICATION RESULT &middot; NEUROSCAN AGENT &nbsp;&nbsp;|&nbsp;&nbsp; CONFIDENCE ${top.toFixed(1)}%</div>
+    <div class="bars">
+      ${['Glioma','Meningioma','No Tumor','Pituitary'].map(k=>{
+        const v=conf[k]||0,a=k===cls;
+        return`<div class="bar-row${a?' active':''}">
+          <span class="bar-lbl">${k}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${v}%"></div></div>
+          <span class="bar-val">${v.toFixed(1)}%</span>
+        </div>`;}).join('')}
     </div>`;
-
-  // Detail cards
-  const details = document.getElementById('detail-cards');
-  details.innerHTML = '';
-  if (rv.flagged) {
-    details.innerHTML += `<div class="flag-card">
-      <h4>⚠ FLAGGED FOR REVIEW — ${(rv.flag_severity||'').toUpperCase()} PRIORITY</h4>
-      <p>${rv.flag_reason||''}</p></div>`;
-  }
-  if (r.clinical_notes) {
-    details.innerHTML += `<div class="detail-card">
-      <h4>Clinical Reasoning</h4><p>${r.clinical_notes}</p></div>`;
-  }
-  if (r.recommendation) {
-    details.innerHTML += `<div class="detail-card">
-      <h4>Recommendation</h4><p>${r.recommendation}</p></div>`;
-  }
-  if (tr.final_summary) {
-    details.innerHTML += `<div class="detail-card">
-      <h4>Agent Summary</h4><p>${tr.final_summary}</p></div>`;
-  }
-
-  document.getElementById('result-section').classList.add('show');
+  const dc=document.getElementById('det-cards');dc.innerHTML='';
+  if(rv.flagged)dc.innerHTML+=`<div class="flag-card"><h4>&#9888; FLAGGED FOR REVIEW &mdash; ${(rv.flag_severity||'').toUpperCase()} PRIORITY</h4><p>${rv.flag_reason||''}</p></div>`;
+  if(r.clinical_notes)dc.innerHTML+=`<div class="det-card"><h4>Clinical Observations</h4><p>${r.clinical_notes}</p></div>`;
+  if(r.recommendation)dc.innerHTML+=`<div class="det-card"><h4>Recommendation</h4><p>${r.recommendation}</p></div>`;
+  if(tr.final_summary)dc.innerHTML+=`<div class="det-card"><h4>Agent Summary</h4><p>${tr.final_summary}</p></div>`;
+  document.getElementById('res-sec').classList.add('show');
 }
-
-// ── Reset scanner ─────────────────────────────────────────────────
-function resetScanner() {
-  fileInput.value = '';
-  fileName.style.display = 'none';
-  dropZone.querySelector('.file-drop-text').style.display = '';
-  document.getElementById('result-section').classList.remove('show');
-  document.getElementById('log-box').classList.remove('visible');
-  document.getElementById('analyze-btn').disabled = false;
-  document.getElementById('btn-text').textContent = '▶  Analyze MRI Scan';
-  resetLogs(); hideStatus();
+/* ── reset ───────────────────────────────────────────────────── */
+function resetScanner(){
+  finp.value='';fn.style.display='none';drop.querySelector('.drop-text').style.display='';
+  document.getElementById('res-sec').classList.remove('show');
+  document.getElementById('log-box').classList.remove('show');
+  document.getElementById('scan-btn').disabled=false;
+  document.getElementById('btn-t').textContent='&#9654;\xa0 Analyze MRI Scan';
+  hideSt();
 }
-
-// ── Main analyze ──────────────────────────────────────────────────
-document.getElementById('analyze-btn').addEventListener('click', async () => {
-  const file = fileInput.files[0];
-  const key  = keyInput.value.trim();
-  const ctx  = document.getElementById('ctx-input').value;
-
-  if (!file) return showStatus('Choose an MRI image first.', 'error');
-  if (!key)  return showStatus('Enter your Gemini API key.', 'error');
-  hideStatus();
-  sessionStorage.setItem('nsa_key', key);
-
-  document.getElementById('analyze-btn').disabled = true;
-  document.getElementById('btn-text').innerHTML = '<span class="spinner">⟳</span> Analysing...';
-  document.getElementById('result-section').classList.remove('show');
-  document.getElementById('log-box').classList.add('visible');
-  resetLogs();
-  runLogs();
-
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('context', ctx);
-
-  try {
-    const res = await fetch('/analyze', {
-      method: 'POST',
-      headers: { 'X-Gemini-Key': key },
-      body: fd
-    });
-    const data = await res.json().catch(() => ({}));
-    document.getElementById('log-box').classList.remove('visible');
-    if (res.status === 422 && data.error === 'not_brain_mri') {
-      showStatus('Not a brain MRI scan: ' + (data.detail || ''), 'warn');
-    } else if (!res.ok) {
-      showStatus(data.detail || ('Request failed (' + res.status + ').'), 'error');
-    } else {
-      renderResult(data);
-    }
-  } catch (e) {
-    showStatus('Network error — please try again.', 'error');
-  }
-
-  document.getElementById('analyze-btn').disabled = false;
-  document.getElementById('btn-text').textContent = '▶  Analyze MRI Scan';
+/* ── analyze ─────────────────────────────────────────────────── */
+document.getElementById('scan-btn').addEventListener('click',async()=>{
+  const file=finp.files[0],key=ki.value.trim(),ctx=document.getElementById('ctx-inp').value;
+  if(!file)return showSt('Choose an MRI image first.','err');
+  if(!key)return showSt('Enter your Gemini API key (free at aistudio.google.com/apikey).','err');
+  hideSt();sessionStorage.setItem('nsa_gk',key);
+  document.getElementById('scan-btn').disabled=true;
+  document.getElementById('btn-t').innerHTML='<span class="spin">&#8987;</span>&nbsp; Analysing...';
+  document.getElementById('res-sec').classList.remove('show');
+  document.getElementById('log-box').classList.add('show');
+  startLog();
+  const fd=new FormData();fd.append('file',file);fd.append('context',ctx);
+  try{
+    const res=await fetch('/analyze',{method:'POST',headers:{'X-Gemini-Key':key},body:fd});
+    const data=await res.json().catch(()=>({}));
+    document.getElementById('log-box').classList.remove('show');
+    if(res.status===422&&data.error==='not_brain_mri')showSt('Not a brain MRI scan: '+(data.detail||''),'warn');
+    else if(!res.ok)showSt(data.detail||('Request failed ('+res.status+').'));
+    else renderResult(data);
+  }catch(e){showSt('Network error — please try again.');}
+  document.getElementById('scan-btn').disabled=false;
+  document.getElementById('btn-t').textContent='&#9654;\xa0 Analyze MRI Scan';
 });
 </script>
 </body>
